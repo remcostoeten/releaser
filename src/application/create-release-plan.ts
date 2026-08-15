@@ -1,0 +1,221 @@
+import type { ReleaserConfig } from '../config/schema.js'
+import { checkPassed, type ReleaseCheck } from '../domain/checks.js'
+import { mutatedPaths } from '../domain/mutations.js'
+import { createReleasePlan as buildReleasePlan, type ReleasePlan } from '../domain/release-plan.js'
+import { fingerprintRepository, type RepositoryState } from '../domain/repository.js'
+import {
+  highestVersion,
+  resolveReleaseVersion,
+  versionParts,
+  type ReleaseVersion,
+  type VersionSelection,
+} from '../domain/version.js'
+import type {
+  GitHubReader,
+  ManifestReader,
+  MutationPlanner,
+  NotesReader,
+  PlanClock,
+  PlanIdFactory,
+  RegistryReader,
+  RepositoryReader,
+  ToolchainReader,
+} from './ports.js'
+import {
+  githubChecks,
+  manifestChecks,
+  manifestUnreadableCheck,
+  notARepositoryCheck,
+  npmAuthenticationCheck,
+  replacementMismatchCheck,
+  replacementsMatchCheck,
+  repositoryChecks,
+  resolveReleaseBranch,
+  tagAvailableCheck,
+  toolchainChecks,
+  versionNotPublishedCheck,
+} from './preflight.js'
+import {
+  buildBoundary,
+  buildGitHubReleaseAction,
+  buildNpmPublishAction,
+} from './release-actions.js'
+import { renderTemplate } from './render-template.js'
+
+export type CreateReleasePlanDependencies = {
+  toolchain: ToolchainReader
+  repository: RepositoryReader
+  manifest: ManifestReader
+  registry: RegistryReader
+  github: GitHubReader
+  mutations: MutationPlanner
+  notes: NotesReader
+  clock: PlanClock
+  ids: PlanIdFactory
+}
+
+export type CreateReleasePlanRequest = {
+  config: ReleaserConfig
+  selection: VersionSelection
+  explicitDistTag: string | null
+}
+
+export type CreateReleasePlanResult =
+  | { kind: 'planned'; plan: ReleasePlan; checks: ReleaseCheck[] }
+  | { kind: 'not-planned'; checks: ReleaseCheck[] }
+
+function pushBranchName(config: ReleaserConfig, state: RepositoryState): string {
+  if (state.head.kind === 'branch') {
+    return state.head.branch
+  }
+
+  return resolveReleaseBranch(config, state) ?? 'HEAD'
+}
+
+function templateValuesFor(version: ReleaseVersion): {
+  version: string
+  previousVersion: string
+  major: string
+  minor: string
+  patch: string
+} {
+  return {
+    version: version.nextVersion,
+    previousVersion: version.previousVersion,
+    ...versionParts(version.nextVersion),
+  }
+}
+
+/**
+ * Builds a `ReleasePlan` and the preflight results it was judged against.
+ *
+ * Every dependency is read-only: this function writes no file, no journal
+ * entry, and nothing over the network. A blocking check is returned rather
+ * than thrown, so the caller decides whether to proceed or override it.
+ */
+export async function createReleasePlan(
+  deps: CreateReleasePlanDependencies,
+  request: CreateReleasePlanRequest,
+): Promise<CreateReleasePlanResult> {
+  const { config } = request
+  const [gitVersion, npmVersion] = await Promise.all([
+    deps.toolchain.readGitVersion(),
+    deps.toolchain.readNpmVersion(),
+  ])
+  const checks: ReleaseCheck[] = toolchainChecks(gitVersion, npmVersion)
+
+  const lookup = await deps.repository.readState()
+
+  if (lookup.kind === 'not-a-repository') {
+    checks.push(notARepositoryCheck(lookup.path))
+    return { kind: 'not-planned', checks }
+  }
+
+  const state = lookup.state
+  checks.push(
+    checkPassed('inside-git-repository', 'Inside a Git repository'),
+    ...repositoryChecks(config, state),
+  )
+
+  const manifestLookup = await deps.manifest.read()
+
+  if (manifestLookup.kind === 'unreadable') {
+    checks.push(manifestUnreadableCheck(manifestLookup.path, manifestLookup.reason))
+    return { kind: 'not-planned', checks }
+  }
+
+  const manifest = manifestLookup.manifest
+  checks.push(...manifestChecks(manifest.private))
+
+  const published = await deps.registry.readPublishedVersions(manifest.name)
+  const publishedVersions = published.kind === 'published' ? published.versions : []
+  const authentication = await deps.registry.readAuthentication()
+  checks.push(npmAuthenticationCheck(authentication))
+
+  const version = resolveReleaseVersion({
+    manifestVersion: manifest.version,
+    highestPublishedVersion: highestVersion(publishedVersions),
+    selection: request.selection,
+    explicitDistTag: request.explicitDistTag ?? config.npm.tag,
+  })
+
+  checks.push(versionNotPublishedCheck(manifest.name, version.nextVersion, publishedVersions))
+
+  const tagName = `${config.tagPrefix}${version.nextVersion}`
+  const [localTag, remoteTag] = await Promise.all([
+    deps.repository.localTagExists(tagName),
+    deps.repository.remoteTagExists(config.remote, tagName),
+  ])
+  checks.push(tagAvailableCheck(tagName, localTag, remoteTag))
+
+  const tokenStatus = await deps.github.readTokenStatus()
+  const githubRef = config.github.release
+    ? await deps.github.resolveRepository(config.remote)
+    : null
+  checks.push(...githubChecks(config, tokenStatus))
+
+  const previousRelease = await deps.repository.findPreviousRelease(config.tagPrefix)
+  const boundary = buildBoundary(state.head.sha, previousRelease)
+
+  const mutationOutcome = await deps.mutations.planMutations({
+    previousVersion: version.previousVersion,
+    nextVersion: version.nextVersion,
+  })
+
+  if (mutationOutcome.kind === 'replacement-mismatch') {
+    checks.push(
+      replacementMismatchCheck(
+        mutationOutcome.file,
+        mutationOutcome.expectedMatches,
+        mutationOutcome.actualMatches,
+      ),
+    )
+    return { kind: 'not-planned', checks }
+  }
+
+  const fileMutations = mutationOutcome.mutations
+  checks.push(replacementsMatchCheck())
+
+  const notes = await deps.notes.collect({
+    boundary,
+    version: version.nextVersion,
+    previousVersion: version.previousVersion,
+  })
+
+  const templateValues = templateValuesFor(version)
+
+  const plan = buildReleasePlan({
+    id: deps.ids.next(),
+    createdAt: deps.clock.now(),
+    repositoryRoot: state.root,
+    packageName: manifest.name,
+    fingerprint: fingerprintRepository(state, manifest.version),
+    boundary,
+    version,
+    fileMutations,
+    commit: {
+      message: renderTemplate(config.commitMessage, templateValues),
+      paths: mutatedPaths(fileMutations),
+    },
+    tag: {
+      name: tagName,
+      message: renderTemplate(config.tagMessage, templateValues),
+    },
+    pushBranch: {
+      remote: config.remote,
+      target: { kind: 'branch', branch: pushBranchName(config, state) },
+    },
+    pushTag: { remote: config.remote, target: { kind: 'tag', tag: tagName } },
+    npmPublish: buildNpmPublishAction(config, manifest, version),
+    githubRelease: buildGitHubReleaseAction({
+      config,
+      tokenStatus,
+      githubRef,
+      tagName,
+      prerelease: version.prerelease,
+    }),
+    notes,
+  })
+
+  return { kind: 'planned', plan, checks }
+}

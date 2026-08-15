@@ -10,6 +10,7 @@ import { defaultConfig } from '../../src/config/schema.js'
 import { VersionNotIncreasing } from '../../src/domain/errors.js'
 import { serializeReleasePlan } from '../../src/domain/release-plan.js'
 import { parseReleasePlan } from '../../src/journal/release-plan-schema.js'
+import { branch, digest, repoPath, sha, tag, version } from '../helpers/semantic.js'
 import {
   cleanRepositoryState,
   createRecordingPorts,
@@ -63,7 +64,7 @@ describe('createReleasePlan', () => {
 
     expect(result.plan.fingerprint).toEqual({
       headSha: 'a'.repeat(40),
-      statusDigest: 'digest-clean',
+      statusDigest: digest('0'.repeat(64)),
       manifestVersion: '1.2.3',
       upstreamSha: 'a'.repeat(40),
     })
@@ -90,7 +91,7 @@ describe('createReleasePlan', () => {
 
   it('uses the boundary of the previous release when one exists', async () => {
     const { result } = await plan({
-      previousRelease: { ref: 'v1.2.3', sha: 'e'.repeat(40), version: '1.2.3' },
+      previousRelease: { ref: tag('v1.2.3'), sha: sha('e'.repeat(40)), version: version('1.2.3') },
     })
     if (result.kind !== 'planned') throw new Error('expected a plan')
 
@@ -149,7 +150,7 @@ describe('createReleasePlan', () => {
     const { result } = await plan({
       mutations: {
         kind: 'replacement-mismatch',
-        file: 'README.md',
+        file: repoPath('README.md'),
         expectedMatches: 1,
         actualMatches: 0,
       },
@@ -187,7 +188,7 @@ describe('createReleasePlan', () => {
   it('warns when releasing from a branch other than the release branch', async () => {
     const state = cleanRepositoryState()
     const { result } = await plan({
-      state: { ...state, defaultBranch: 'release' },
+      state: { ...state, defaultBranch: branch('release') },
     })
 
     expect(result.checks.find((entry) => entry.id === 'on-release-branch')?.outcome).toBe('warned')

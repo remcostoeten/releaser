@@ -4,8 +4,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createGitReader } from '../../src/git/git-reader.js'
 import { createCommandRunner } from '../../src/shared/command-runner.js'
 import { createTempRepository, type TempRepository } from '../helpers/temp-repository.js'
+import { branch, ref, tag, version } from '../helpers/semantic.js'
 
 const repositories: TempRepository[] = []
+const HEAD = ref('HEAD')
 
 async function newRepository(options: { withOrigin?: boolean } = {}): Promise<TempRepository> {
   const repository = await createTempRepository(options)
@@ -79,9 +81,9 @@ describe('git reader — repository state', () => {
     await repository.commit('initial', { 'a.txt': 'one\n' })
     const reader = readerFor(repository)
 
-    const before = await reader.readFingerprint('1.0.0')
+    const before = await reader.readFingerprint(version('1.0.0'))
     await repository.write('a.txt', 'two\n')
-    const after = await reader.readFingerprint('1.0.0')
+    const after = await reader.readFingerprint(version('1.0.0'))
 
     expect(after.headSha).toBe(before.headSha)
     expect(after.statusDigest).not.toBe(before.statusDigest)
@@ -182,11 +184,11 @@ describe('git reader — upstream tracking', () => {
     await repository.commit('initial', { 'a.txt': 'one\n' })
     const reader = readerFor(repository)
 
-    expect(await reader.headExistsOnRemote('main', await repository.head())).toBe(false)
+    expect(await reader.headExistsOnRemote(branch('main'), await repository.head())).toBe(false)
 
     await repository.git(['push', 'origin', 'main'])
 
-    expect(await reader.headExistsOnRemote('main', await repository.head())).toBe(true)
+    expect(await reader.headExistsOnRemote(branch('main'), await repository.head())).toBe(true)
   })
 
   it('reports the remote default branch when origin/HEAD is set', async () => {
@@ -238,7 +240,7 @@ describe('git reader — tags and history', () => {
     const previous = await reader.findPreviousRelease('v')
 
     expect(previous).toMatchObject({ ref: 'v1.1.0', version: '1.1.0' })
-    expect((await reader.listLocalTags()).map((tag) => tag.name).toSorted()).toEqual([
+    expect((await reader.listLocalTags()).map((entry) => entry.name).toSorted()).toEqual([
       'nightly',
       'v1.0.0',
       'v1.1.0',
@@ -279,7 +281,7 @@ describe('git reader — tags and history', () => {
     await repository.git(['push', 'origin', 'refs/tags/v1.0.0'])
 
     expect(await reader.resolveRemoteTag('v1.0.0')).toBe(sha)
-    expect((await reader.listRemoteTags()).map((tag) => tag.name)).toEqual(['v1.0.0'])
+    expect((await reader.listRemoteTags()).map((entry) => entry.name)).toEqual(['v1.0.0'])
   })
 
   it('preserves commit messages containing newlines and quotes', async () => {
@@ -288,7 +290,7 @@ describe('git reader — tags and history', () => {
     const message = 'feat: add "quoted" flag\n\nBody line one.\nBody line two.\n'
     await repository.commit(message, { 'a.txt': 'two\n' })
 
-    const commits = await readerFor(repository).readCommits({ from: null, to: 'HEAD' })
+    const commits = await readerFor(repository).readCommits({ from: null, to: HEAD })
 
     expect(commits).toHaveLength(2)
     expect(commits[0]?.subject).toBe('feat: add "quoted" flag')
@@ -305,8 +307,8 @@ describe('git reader — tags and history', () => {
     await repository.commit('fix: c', { 'c.txt': 'c\n' })
     const reader = readerFor(repository)
 
-    const commits = await reader.readCommits({ from: 'v1.0.0', to: 'HEAD' })
-    const files = await reader.readChangedFiles({ from: 'v1.0.0', to: 'HEAD' })
+    const commits = await reader.readCommits({ from: tag('v1.0.0'), to: HEAD })
+    const files = await reader.readChangedFiles({ from: tag('v1.0.0'), to: HEAD })
 
     expect(commits.map((commit) => commit.subject)).toEqual(['fix: c', 'feat: b'])
     expect(files).toEqual(['b.txt', 'c.txt'])
@@ -316,7 +318,7 @@ describe('git reader — tags and history', () => {
     const repository = await newRepository()
     await repository.commit('initial', { 'a.txt': 'one\n', 'nested/b.txt': 'b\n' })
 
-    const files = await readerFor(repository).readChangedFiles({ from: null, to: 'HEAD' })
+    const files = await readerFor(repository).readChangedFiles({ from: null, to: HEAD })
 
     expect(files).toEqual(['a.txt', 'nested/b.txt'])
   })
@@ -330,7 +332,7 @@ describe('git reader — tags and history', () => {
     await repository.commit('main work', { 'main.txt': 'main\n' })
     await repository.git(['merge', '--no-ff', 'feature', '--message', 'Merge branch feature'])
 
-    const commits = await readerFor(repository).readCommits({ from: null, to: 'HEAD' })
+    const commits = await readerFor(repository).readCommits({ from: null, to: HEAD })
 
     expect(commits[0]?.subject).toBe('Merge branch feature')
     expect(commits[0]?.parents).toHaveLength(2)

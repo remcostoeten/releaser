@@ -1,11 +1,12 @@
 import { createHash } from 'node:crypto'
 import { realpath } from 'node:fs/promises'
 import type { HeadState, UpstreamState, WorkingTreeState } from '../domain/repository.js'
+import { AbsolutePath, BranchName, Digest, Ref, Sha } from '../domain/semantic.js'
 import { type GitCommand, splitLines } from './git-command.js'
 
 export type GitRepositoryLocation =
-  | { kind: 'found'; root: string }
-  | { kind: 'no-commits'; root: string }
+  | { kind: 'found'; root: AbsolutePath }
+  | { kind: 'no-commits'; root: AbsolutePath }
   | { kind: 'not-a-repository'; path: string }
 
 const RENAME_STATUS_CODES = new Set(['R', 'C'])
@@ -20,7 +21,7 @@ export async function locateRepository(
     return { kind: 'not-a-repository', path }
   }
 
-  const resolved = await realpath(root)
+  const resolved = AbsolutePath.from(await realpath(root), 'git rev-parse --show-toplevel')
   const head = await git.readText(['rev-parse', '--verify', '--quiet', 'HEAD'])
 
   if (head === null || head.length === 0) {
@@ -70,19 +71,24 @@ export async function readWorkingTree(git: GitCommand): Promise<WorkingTreeState
   return { kind: 'dirty', entries }
 }
 
-export async function readStatusDigest(git: GitCommand): Promise<string> {
+export async function readStatusDigest(git: GitCommand): Promise<Digest> {
   const result = await git.runOrThrow(['status', '--porcelain=v1'])
-  return createHash('sha256').update(result.stdout).digest('hex')
+  return Digest.from(createHash('sha256').update(result.stdout).digest('hex'), 'the status digest')
 }
 
-export async function readCurrentBranch(git: GitCommand): Promise<string | null> {
+export async function readCurrentBranch(git: GitCommand): Promise<BranchName | null> {
   const branch = await git.readText(['symbolic-ref', '--quiet', '--short', 'HEAD'])
-  return branch === null || branch.length === 0 ? null : branch
+
+  if (branch === null || branch.length === 0) {
+    return null
+  }
+
+  return BranchName.from(branch, 'git symbolic-ref HEAD')
 }
 
-export async function readHeadSha(git: GitCommand): Promise<string> {
+export async function readHeadSha(git: GitCommand): Promise<Sha> {
   const result = await git.runOrThrow(['rev-parse', 'HEAD'])
-  return result.stdout.trim()
+  return Sha.from(result.stdout.trim(), 'git rev-parse HEAD')
 }
 
 function parseAheadBehind(output: string): { ahead: number; behind: number } {
@@ -112,7 +118,14 @@ export async function readUpstream(git: GitCommand, branch: string): Promise<Ups
   const counts = await git.readText(['rev-list', '--left-right', '--count', `${ref}...HEAD`])
   const { ahead, behind } = parseAheadBehind(counts ?? '0 0')
 
-  return { kind: 'tracked', remote, ref, sha, ahead, behind }
+  return {
+    kind: 'tracked',
+    remote,
+    ref: Ref.from(ref, 'git for-each-ref upstream'),
+    sha: Sha.from(sha, 'git rev-parse upstream'),
+    ahead,
+    behind,
+  }
 }
 
 export async function readHead(git: GitCommand): Promise<HeadState> {
@@ -136,7 +149,10 @@ export async function readRemoteUrl(git: GitCommand, remote: string): Promise<st
   return url === null || url.length === 0 ? null : url
 }
 
-export async function readDefaultBranch(git: GitCommand, remote: string): Promise<string | null> {
+export async function readDefaultBranch(
+  git: GitCommand,
+  remote: string,
+): Promise<BranchName | null> {
   const ref = await git.readText([
     'symbolic-ref',
     '--quiet',
@@ -149,5 +165,7 @@ export async function readDefaultBranch(git: GitCommand, remote: string): Promis
   }
 
   const prefix = `${remote}/`
-  return ref.startsWith(prefix) ? ref.slice(prefix.length) : ref
+  const branch = ref.startsWith(prefix) ? ref.slice(prefix.length) : ref
+
+  return BranchName.from(branch, `git symbolic-ref refs/remotes/${remote}/HEAD`)
 }

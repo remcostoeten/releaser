@@ -1,7 +1,9 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import type { Sha } from '../../src/domain/semantic.js'
 import { createCommandRunner, type CommandRunner } from '../../src/shared/command-runner.js'
+import { sha } from './semantic.js'
 
 const AUTHOR = { name: 'Releaser Test', email: 'test@example.invalid' }
 const FIXED_DATE = '2024-01-01T00:00:00+00:00'
@@ -24,8 +26,8 @@ export type TempRepository = {
   runner: CommandRunner
   git(args: string[], cwd?: string): Promise<string>
   write(relativePath: string, content: string): Promise<void>
-  commit(message: string, files?: Record<string, string>): Promise<string>
-  head(): Promise<string>
+  commit(message: string, files?: Record<string, string>): Promise<Sha>
+  head(): Promise<Sha>
   cleanup(): Promise<void>
 }
 
@@ -78,21 +80,23 @@ export async function createTempRepository(
     await writeFile(target, content, 'utf8')
   }
 
+  async function readHead(): Promise<Sha> {
+    return sha(await git(['rev-parse', 'HEAD']))
+  }
+
   return {
     root,
     originPath,
     runner,
     git,
     write,
-    async commit(message, files = {}): Promise<string> {
+    async commit(message, files = {}): Promise<Sha> {
       await Promise.all(Object.entries(files).map(([path, content]) => write(path, content)))
       await git(['add', '--all'])
       await git(['commit', '--message', message, '--allow-empty'])
-      return git(['rev-parse', 'HEAD'])
+      return readHead()
     },
-    head(): Promise<string> {
-      return git(['rev-parse', 'HEAD'])
-    },
+    head: readHead,
     cleanup(): Promise<void> {
       return rm(workspace, { recursive: true, force: true })
     },

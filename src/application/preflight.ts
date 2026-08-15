@@ -7,6 +7,7 @@ import {
   type ReleaseCheck,
 } from '../domain/checks.js'
 import type { RepositoryState, UpstreamState } from '../domain/repository.js'
+import { BranchName } from '../domain/semantic.js'
 import { meetsMinimum } from '../domain/version.js'
 import type { GitHubTokenStatus, NpmAuthentication } from './ports.js'
 
@@ -15,9 +16,9 @@ const MINIMUM_GIT_VERSION = '2.30.0'
 export function resolveReleaseBranch(
   config: ReleaserConfig,
   state: RepositoryState,
-): string | null {
+): BranchName | null {
   if (config.releaseBranch !== null) {
-    return config.releaseBranch
+    return BranchName.from(config.releaseBranch, 'the configured release branch')
   }
 
   if (state.defaultBranch !== null) {

@@ -7,28 +7,29 @@ import {
   type RepositoryFingerprint,
 } from '../../src/domain/repository.js'
 import { cleanRepositoryState } from '../helpers/recording-ports.js'
+import { digest, sha, version } from '../helpers/semantic.js'
 
 const baseline: RepositoryFingerprint = {
-  headSha: 'a'.repeat(40),
-  statusDigest: 'digest-clean',
-  manifestVersion: '1.2.3',
-  upstreamSha: 'b'.repeat(40),
+  headSha: sha('a'.repeat(40)),
+  statusDigest: digest('0'.repeat(64)),
+  manifestVersion: version('1.2.3'),
+  upstreamSha: sha('b'.repeat(40)),
 }
 
-const CHANGED: Record<FingerprintField, string> = {
-  headSha: 'c'.repeat(40),
-  statusDigest: 'digest-dirty',
-  manifestVersion: '1.2.4',
-  upstreamSha: 'd'.repeat(40),
+const CHANGED: RepositoryFingerprint = {
+  headSha: sha('c'.repeat(40)),
+  statusDigest: digest('1'.repeat(64)),
+  manifestVersion: version('1.2.4'),
+  upstreamSha: sha('d'.repeat(40)),
 }
 
 describe('fingerprintRepository', () => {
   it('captures all four fields from the repository state', () => {
-    expect(fingerprintRepository(cleanRepositoryState(), '1.2.3')).toEqual({
-      headSha: 'a'.repeat(40),
-      statusDigest: 'digest-clean',
-      manifestVersion: '1.2.3',
-      upstreamSha: 'a'.repeat(40),
+    expect(fingerprintRepository(cleanRepositoryState(), version('1.2.3'))).toEqual({
+      headSha: sha('a'.repeat(40)),
+      statusDigest: digest('0'.repeat(64)),
+      manifestVersion: version('1.2.3'),
+      upstreamSha: sha('a'.repeat(40)),
     })
   })
 
@@ -36,10 +37,10 @@ describe('fingerprintRepository', () => {
     const state = cleanRepositoryState()
     const detached = {
       ...state,
-      head: { kind: 'detached' as const, sha: 'a'.repeat(40) },
+      head: { kind: 'detached' as const, sha: sha('a'.repeat(40)) },
     }
 
-    expect(fingerprintRepository(detached, '1.2.3').upstreamSha).toBe(null)
+    expect(fingerprintRepository(detached, version('1.2.3')).upstreamSha).toBe(null)
   })
 })
 

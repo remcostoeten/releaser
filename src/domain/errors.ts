@@ -237,6 +237,28 @@ export class ConfigurationError extends ReleaserError {
   readonly remediation = 'Fix the configuration error and retry.'
 }
 
+export class MalformedValue extends ReleaserError {
+  readonly kind = 'MalformedValue'
+  readonly remediation = 'This is a bug in releaser. Please report it with the command you ran.'
+
+  constructor(typeName: string, value: string, context: string) {
+    super(`${context} produced a value that is not a valid ${typeName}: ${value}`, {
+      typeName,
+      value,
+      context,
+    })
+  }
+}
+
+export class UnreachableCase extends ReleaserError {
+  readonly kind = 'UnreachableCase'
+  readonly remediation = 'This is a bug in releaser. Please report it with the command you ran.'
+
+  constructor(context: string, value: unknown) {
+    super(`${context} reached a case the type system rules out`, { context, value })
+  }
+}
+
 export function isReleaserError(error: unknown): error is ReleaserError {
   return error instanceof ReleaserError
 }

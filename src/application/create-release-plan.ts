@@ -3,6 +3,7 @@ import { checkPassed, type ReleaseCheck } from '../domain/checks.js'
 import { mutatedPaths } from '../domain/mutations.js'
 import { createReleasePlan as buildReleasePlan, type ReleasePlan } from '../domain/release-plan.js'
 import { fingerprintRepository, type RepositoryState } from '../domain/repository.js'
+import { BranchName, TagName } from '../domain/semantic.js'
 import {
   highestVersion,
   resolveReleaseVersion,
@@ -64,12 +65,14 @@ export type CreateReleasePlanResult =
   | { kind: 'planned'; plan: ReleasePlan; checks: ReleaseCheck[] }
   | { kind: 'not-planned'; checks: ReleaseCheck[] }
 
-function pushBranchName(config: ReleaserConfig, state: RepositoryState): string {
+const DETACHED_PUSH_TARGET = BranchName.from('HEAD', 'the detached-HEAD push target')
+
+function pushBranchName(config: ReleaserConfig, state: RepositoryState): BranchName {
   if (state.head.kind === 'branch') {
     return state.head.branch
   }
 
-  return resolveReleaseBranch(config, state) ?? 'HEAD'
+  return resolveReleaseBranch(config, state) ?? DETACHED_PUSH_TARGET
 }
 
 function templateValuesFor(version: ReleaseVersion): {
@@ -141,7 +144,10 @@ export async function createReleasePlan(
 
   checks.push(versionNotPublishedCheck(manifest.name, version.nextVersion, publishedVersions))
 
-  const tagName = `${config.tagPrefix}${version.nextVersion}`
+  const tagName = TagName.from(
+    `${config.tagPrefix}${version.nextVersion}`,
+    'the configured tag prefix',
+  )
   const [localTag, remoteTag] = await Promise.all([
     deps.repository.localTagExists(tagName),
     deps.repository.remoteTagExists(config.remote, tagName),

@@ -1,15 +1,24 @@
 import type { FileMutation } from '../domain/mutations.js'
 import type { ReleaseNotes } from '../domain/release-notes.js'
 import type { ReleaseBoundary, RepositoryState } from '../domain/repository.js'
+import type {
+  Iso8601,
+  PackageName,
+  PlanId,
+  RepoRelativePath,
+  SemVer,
+  Sha,
+  TagName,
+} from '../domain/semantic.js'
 
 export type RepositoryLookup =
   | { kind: 'found'; state: RepositoryState }
   | { kind: 'not-a-repository'; path: string }
 
 export type PreviousRelease = {
-  ref: string
-  sha: string
-  version: string
+  ref: TagName
+  sha: Sha
+  version: SemVer
 }
 
 export type RepositoryReader = {
@@ -20,8 +29,8 @@ export type RepositoryReader = {
 }
 
 export type PackageManifest = {
-  name: string
-  version: string
+  name: PackageName
+  version: SemVer
   private: boolean
 }
 
@@ -62,13 +71,18 @@ export type ToolchainReader = {
 }
 
 export type MutationPlanRequest = {
-  previousVersion: string
-  nextVersion: string
+  previousVersion: SemVer
+  nextVersion: SemVer
 }
 
 export type MutationPlanOutcome =
   | { kind: 'planned'; mutations: FileMutation[] }
-  | { kind: 'replacement-mismatch'; file: string; expectedMatches: number; actualMatches: number }
+  | {
+      kind: 'replacement-mismatch'
+      file: RepoRelativePath
+      expectedMatches: number
+      actualMatches: number
+    }
 
 export type MutationPlanner = {
   planMutations(request: MutationPlanRequest): Promise<MutationPlanOutcome>
@@ -76,8 +90,8 @@ export type MutationPlanner = {
 
 export type NotesRequest = {
   boundary: ReleaseBoundary
-  version: string
-  previousVersion: string | null
+  version: SemVer
+  previousVersion: SemVer | null
 }
 
 export type NotesReader = {
@@ -85,9 +99,9 @@ export type NotesReader = {
 }
 
 export type PlanClock = {
-  now(): string
+  now(): Iso8601
 }
 
 export type PlanIdFactory = {
-  next(): string
+  next(): PlanId
 }

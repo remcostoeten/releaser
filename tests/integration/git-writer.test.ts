@@ -10,6 +10,7 @@ import {
 } from '../../src/git/git-writer.js'
 import { createCommandRunner } from '../../src/shared/command-runner.js'
 import { createTempRepository, type TempRepository } from '../helpers/temp-repository.js'
+import { branch, repoPath, tag } from '../helpers/semantic.js'
 
 const repositories: TempRepository[] = []
 
@@ -36,7 +37,7 @@ describe('release commit', () => {
 
     const outcome = await createReleaseCommit(git, {
       message: 'chore(release): 1.1.0',
-      paths: ['package.json'],
+      paths: [repoPath('package.json')],
     })
 
     expect(outcome.kind).toBe('created')
@@ -50,7 +51,7 @@ describe('release commit', () => {
     await repository.commit('initial', { 'package.json': '{"version":"1.0.0"}\n' })
     await repository.write('package.json', '{"version":"1.1.0"}\n')
     const git = commandFor(repository)
-    const action = { message: 'chore(release): 1.1.0', paths: ['package.json'] }
+    const action = { message: 'chore(release): 1.1.0', paths: [repoPath('package.json')] }
 
     const first = await createReleaseCommit(git, action)
     const second = await createReleaseCommit(git, action)
@@ -64,9 +65,12 @@ describe('release commit', () => {
     await repository.commit('initial', { 'package.json': '{"version":"1.0.0"}\n' })
     await repository.write('package.json', '{"version":"1.1.0"}\n')
     const git = commandFor(repository)
-    const action = { message: 'chore(release): 1.1.0', paths: ['package.json', 'extra.txt'] }
+    const action = {
+      message: 'chore(release): 1.1.0',
+      paths: [repoPath('package.json'), repoPath('extra.txt')],
+    }
 
-    await createReleaseCommit(git, { ...action, paths: ['package.json'] })
+    await createReleaseCommit(git, { ...action, paths: [repoPath('package.json')] })
     await repository.write('extra.txt', 'added later\n')
     const second = await createReleaseCommit(git, action)
 
@@ -81,7 +85,7 @@ describe('annotated tag', () => {
     const sha = await repository.commit('initial', { 'a.txt': 'one\n' })
     const git = commandFor(repository)
 
-    const outcome = await createAnnotatedTag(git, { name: 'v1.0.0', message: '1.0.0' }, sha)
+    const outcome = await createAnnotatedTag(git, { name: tag('v1.0.0'), message: '1.0.0' }, sha)
 
     expect(outcome).toEqual({ kind: 'created', sha })
     expect(await repository.git(['cat-file', '-t', 'v1.0.0'])).toBe('tag')
@@ -91,7 +95,7 @@ describe('annotated tag', () => {
     const repository = await newRepository()
     const sha = await repository.commit('initial', { 'a.txt': 'one\n' })
     const git = commandFor(repository)
-    const action = { name: 'v1.0.0', message: '1.0.0' }
+    const action = { name: tag('v1.0.0'), message: '1.0.0' }
 
     await createAnnotatedTag(git, action, sha)
     const second = await createAnnotatedTag(git, action, sha)
@@ -104,10 +108,10 @@ describe('annotated tag', () => {
     const first = await repository.commit('initial', { 'a.txt': 'one\n' })
     const second = await repository.commit('second', { 'a.txt': 'two\n' })
     const git = commandFor(repository)
-    await createAnnotatedTag(git, { name: 'v1.0.0', message: '1.0.0' }, first)
+    await createAnnotatedTag(git, { name: tag('v1.0.0'), message: '1.0.0' }, first)
 
     await expect(
-      createAnnotatedTag(git, { name: 'v1.0.0', message: '1.0.0' }, second),
+      createAnnotatedTag(git, { name: tag('v1.0.0'), message: '1.0.0' }, second),
     ).rejects.toBeInstanceOf(TagExists)
     expect(await repository.git(['rev-parse', 'refs/tags/v1.0.0^{commit}'])).toBe(first)
   })
@@ -119,8 +123,8 @@ describe('pushing', () => {
     const sha = await repository.commit('initial', { 'a.txt': 'one\n' })
     const git = commandFor(repository)
 
-    const first = await pushBranch(git, 'origin', 'main', sha)
-    const second = await pushBranch(git, 'origin', 'main', sha)
+    const first = await pushBranch(git, 'origin', branch('main'), sha)
+    const second = await pushBranch(git, 'origin', branch('main'), sha)
 
     expect(first.kind).toBe('pushed')
     expect(second.kind).toBe('skipped')
@@ -132,11 +136,13 @@ describe('pushing', () => {
     await repository.commit('initial', { 'a.txt': 'one\n' })
     const sha = await repository.commit('second', { 'a.txt': 'two\n' })
     const git = commandFor(repository)
-    await pushBranch(git, 'origin', 'main', sha)
+    await pushBranch(git, 'origin', branch('main'), sha)
     await repository.git(['reset', '--hard', 'HEAD~1'])
     await repository.commit('rewritten', { 'a.txt': 'rewritten\n' })
 
-    await expect(pushBranch(git, 'origin', 'main', await repository.head())).rejects.toThrow()
+    await expect(
+      pushBranch(git, 'origin', branch('main'), await repository.head()),
+    ).rejects.toThrow()
     expect(await readRemoteBranchSha(git, 'origin', 'main')).toBe(sha)
   })
 
@@ -144,10 +150,10 @@ describe('pushing', () => {
     const repository = await newRepository({ withOrigin: true })
     const sha = await repository.commit('initial', { 'a.txt': 'one\n' })
     const git = commandFor(repository)
-    await createAnnotatedTag(git, { name: 'v1.0.0', message: '1.0.0' }, sha)
+    await createAnnotatedTag(git, { name: tag('v1.0.0'), message: '1.0.0' }, sha)
 
-    const first = await pushTag(git, 'origin', 'v1.0.0', sha)
-    const second = await pushTag(git, 'origin', 'v1.0.0', sha)
+    const first = await pushTag(git, 'origin', tag('v1.0.0'), sha)
+    const second = await pushTag(git, 'origin', tag('v1.0.0'), sha)
 
     expect(first.kind).toBe('pushed')
     expect(second.kind).toBe('skipped')
@@ -158,11 +164,11 @@ describe('pushing', () => {
     const repository = await newRepository({ withOrigin: true })
     const first = await repository.commit('initial', { 'a.txt': 'one\n' })
     const git = commandFor(repository)
-    await createAnnotatedTag(git, { name: 'v1.0.0', message: '1.0.0' }, first)
-    await pushTag(git, 'origin', 'v1.0.0', first)
+    await createAnnotatedTag(git, { name: tag('v1.0.0'), message: '1.0.0' }, first)
+    await pushTag(git, 'origin', tag('v1.0.0'), first)
     const second = await repository.commit('second', { 'a.txt': 'two\n' })
 
-    await expect(pushTag(git, 'origin', 'v1.0.0', second)).rejects.toBeInstanceOf(TagExists)
+    await expect(pushTag(git, 'origin', tag('v1.0.0'), second)).rejects.toBeInstanceOf(TagExists)
     expect(await resolveRemoteTag(git, 'origin', 'v1.0.0')).toBe(first)
   })
 })

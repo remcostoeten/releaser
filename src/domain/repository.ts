@@ -1,34 +1,36 @@
+import type { AbsolutePath, BranchName, Digest, Ref, SemVer, Sha, TagName } from './semantic.js'
+
 export type UpstreamState =
   | { kind: 'none' }
   | {
       kind: 'tracked'
       remote: string
-      ref: string
-      sha: string
+      ref: Ref
+      sha: Sha
       ahead: number
       behind: number
     }
 
 export type HeadState =
-  | { kind: 'branch'; branch: string; sha: string; upstream: UpstreamState }
-  | { kind: 'detached'; sha: string }
+  | { kind: 'branch'; branch: BranchName; sha: Sha; upstream: UpstreamState }
+  | { kind: 'detached'; sha: Sha }
 
 export type WorkingTreeState = { kind: 'clean' } | { kind: 'dirty'; entries: string[] }
 
 export type RepositoryState = {
-  root: string
+  root: AbsolutePath
   head: HeadState
   workingTree: WorkingTreeState
-  statusDigest: string
+  statusDigest: Digest
   remotes: string[]
-  defaultBranch: string | null
+  defaultBranch: BranchName | null
 }
 
 export type RepositoryFingerprint = {
-  headSha: string
-  statusDigest: string
-  manifestVersion: string
-  upstreamSha: string | null
+  headSha: Sha
+  statusDigest: Digest
+  manifestVersion: SemVer
+  upstreamSha: Sha | null
 }
 
 export type FingerprintField = keyof RepositoryFingerprint
@@ -46,11 +48,11 @@ const FINGERPRINT_FIELDS: FingerprintField[] = [
   'upstreamSha',
 ]
 
-export function headSha(head: HeadState): string {
+export function headSha(head: HeadState): Sha {
   return head.sha
 }
 
-export function upstreamSha(head: HeadState): string | null {
+export function upstreamSha(head: HeadState): Sha | null {
   if (head.kind === 'detached' || head.upstream.kind === 'none') {
     return null
   }
@@ -59,7 +61,7 @@ export function upstreamSha(head: HeadState): string | null {
 
 export function fingerprintRepository(
   state: RepositoryState,
-  manifestVersion: string,
+  manifestVersion: SemVer,
 ): RepositoryFingerprint {
   return {
     headSha: headSha(state.head),
@@ -92,11 +94,11 @@ export function fingerprintsMatch(
 }
 
 export type ReleaseBoundary =
-  | { kind: 'initial'; headSha: string }
+  | { kind: 'initial'; headSha: Sha }
   | {
       kind: 'since-release'
-      previousRef: string
-      previousSha: string
-      previousVersion: string
-      headSha: string
+      previousRef: TagName
+      previousSha: Sha
+      previousVersion: SemVer
+      headSha: Sha
     }

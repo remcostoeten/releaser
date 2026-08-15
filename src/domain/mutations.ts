@@ -1,3 +1,5 @@
+import type { RepoRelativePath, SemVer } from './semantic.js'
+
 export type TextEdit = {
   offset: number
   deletedText: string
@@ -11,21 +13,21 @@ export type ReplacementPattern =
 export type FileMutation =
   | {
       kind: 'manifest-version'
-      path: string
-      previousVersion: string
-      nextVersion: string
+      path: RepoRelativePath
+      previousVersion: SemVer
+      nextVersion: SemVer
       edits: TextEdit[]
     }
   | {
       kind: 'lockfile-version'
-      path: string
-      previousVersion: string
-      nextVersion: string
+      path: RepoRelativePath
+      previousVersion: SemVer
+      nextVersion: SemVer
       edits: TextEdit[]
     }
   | {
       kind: 'configured-replacement'
-      path: string
+      path: RepoRelativePath
       pattern: ReplacementPattern
       expectedMatches: number
       edits: TextEdit[]
@@ -54,6 +56,6 @@ export function applyEdits(content: string, edits: readonly TextEdit[]): string 
   return output + content.slice(cursor)
 }
 
-export function mutatedPaths(mutations: readonly FileMutation[]): string[] {
+export function mutatedPaths(mutations: readonly FileMutation[]): RepoRelativePath[] {
   return [...new Set(mutations.map((mutation) => mutation.path))].toSorted()
 }

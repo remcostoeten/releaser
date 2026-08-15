@@ -1,14 +1,23 @@
+import type {
+  BranchName,
+  DistTagName,
+  PackageName,
+  RepoRelativePath,
+  SemVer,
+  TagName,
+} from './semantic.js'
+
 export type GitCommitAction = {
   message: string
-  paths: string[]
+  paths: RepoRelativePath[]
 }
 
 export type GitTagAction = {
-  name: string
+  name: TagName
   message: string
 }
 
-export type PushTarget = { kind: 'branch'; branch: string } | { kind: 'tag'; tag: string }
+export type PushTarget = { kind: 'branch'; branch: BranchName } | { kind: 'tag'; tag: TagName }
 
 export type GitPushAction = {
   remote: string
@@ -18,9 +27,9 @@ export type GitPushAction = {
 export type NpmPublishAction =
   | {
       kind: 'publish'
-      packageName: string
-      version: string
-      distTag: string
+      packageName: PackageName
+      version: SemVer
+      distTag: DistTagName
       access: 'public' | 'restricted'
     }
   | { kind: 'skipped'; reason: string }
@@ -30,7 +39,7 @@ export type GitHubReleaseAction =
       kind: 'create'
       owner: string
       repo: string
-      tagName: string
+      tagName: TagName
       name: string
       body: string
       draft: boolean

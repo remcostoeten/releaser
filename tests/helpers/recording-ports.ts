@@ -10,6 +10,17 @@ import type {
 } from '../../src/application/ports.js'
 import type { ReleaseNotes } from '../../src/domain/release-notes.js'
 import type { RepositoryState } from '../../src/domain/repository.js'
+import {
+  absolutePath,
+  branch,
+  digest,
+  packageName,
+  planId,
+  ref,
+  sha,
+  timestamp,
+  version,
+} from './semantic.js'
 
 export type PortRecorder = {
   calls: string[]
@@ -51,24 +62,24 @@ export const READ_ONLY_PORT_METHODS = [
 
 export function cleanRepositoryState(root = '/tmp/repo'): RepositoryState {
   return {
-    root,
+    root: absolutePath(root),
     head: {
       kind: 'branch',
-      branch: 'main',
-      sha: 'a'.repeat(40),
+      branch: branch('main'),
+      sha: sha('a'.repeat(40)),
       upstream: {
         kind: 'tracked',
         remote: 'origin',
-        ref: 'origin/main',
-        sha: 'a'.repeat(40),
+        ref: ref('origin/main'),
+        sha: sha('a'.repeat(40)),
         ahead: 0,
         behind: 0,
       },
     },
     workingTree: { kind: 'clean' },
-    statusDigest: 'digest-clean',
+    statusDigest: digest('0'.repeat(64)),
     remotes: ['origin'],
-    defaultBranch: 'main',
+    defaultBranch: branch('main'),
   }
 }
 
@@ -86,15 +97,15 @@ export function createRecordingPorts(options: RecordingPortsOptions = {}): {
   const state = options.state ?? cleanRepositoryState()
   const manifest: ManifestLookup = options.manifest ?? {
     kind: 'found',
-    manifest: { name: 'example-package', version: '1.2.3', private: false },
+    manifest: { name: packageName('example-package'), version: version('1.2.3'), private: false },
   }
   const published: PublishedVersions = options.published ?? {
     kind: 'published',
     versions: ['1.0.0', '1.2.3'],
   }
   const notes: ReleaseNotes = options.notes ?? {
-    version: '1.2.4',
-    previousVersion: '1.2.3',
+    version: version('1.2.4'),
+    previousVersion: version('1.2.3'),
     sections: [],
   }
 
@@ -145,13 +156,13 @@ export function createRecordingPorts(options: RecordingPortsOptions = {}): {
     clock: {
       now: () => {
         recorder.calls.push('clock.now')
-        return '2026-01-01T00:00:00.000Z'
+        return timestamp('2026-01-01T00:00:00.000Z')
       },
     },
     ids: {
       next: () => {
         recorder.calls.push('ids.next')
-        return 'plan-0001'
+        return planId('plan-0001')
       },
     },
   }

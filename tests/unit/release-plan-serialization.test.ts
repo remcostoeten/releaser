@@ -92,6 +92,33 @@ describe('release plan schema', () => {
     expect(() => parseReleasePlan(wire)).toThrow(InvalidReleasePlan)
   })
 
+  it('rejects a tag name where a SHA belongs', () => {
+    const wire = JSON.parse(serializeReleasePlan(examplePlan())) as {
+      fingerprint: Record<string, unknown>
+    }
+    wire.fingerprint.headSha = 'v1.2.3'
+
+    expect(() => parseReleasePlan(wire)).toThrow(InvalidReleasePlan)
+  })
+
+  it('rejects a version that is not canonical SemVer', () => {
+    const wire = JSON.parse(serializeReleasePlan(examplePlan())) as {
+      version: Record<string, unknown>
+    }
+    wire.version.nextVersion = 'v1.3.0'
+
+    expect(() => parseReleasePlan(wire)).toThrow(InvalidReleasePlan)
+  })
+
+  it('rejects a mutation path that escapes the repository', () => {
+    const wire = JSON.parse(serializeReleasePlan(examplePlan())) as {
+      fileMutations: Record<string, unknown>[]
+    }
+    wire.fileMutations[0]!.path = '../outside.json'
+
+    expect(() => parseReleasePlan(wire)).toThrow(InvalidReleasePlan)
+  })
+
   it('rejects text that is not JSON at all', () => {
     expect(() => deserializeReleasePlan('{ not json')).toThrow(InvalidReleasePlan)
   })

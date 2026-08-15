@@ -1,18 +1,21 @@
 import semver from 'semver'
+import { parseVersion } from '../domain/version.js'
+import { Ref, type Revision, type SemVer, Sha, TagName } from '../domain/semantic.js'
 import { type GitCommand, splitLines } from './git-command.js'
 
 export type GitTagRef = {
-  name: string
-  commitSha: string
+  name: TagName
+  commitSha: Sha
 }
 
 export type ReleaseTag = {
-  ref: string
-  sha: string
-  version: string
+  ref: TagName
+  sha: Sha
+  version: SemVer
 }
 
 const PEELED_SUFFIX = '^{}'
+const HEAD_REF = Ref.from('HEAD', 'the built-in HEAD ref')
 
 export async function listLocalTags(git: GitCommand): Promise<GitTagRef[]> {
   const output = await git.readText([
@@ -34,21 +37,26 @@ export async function listLocalTags(git: GitCommand): Promise<GitTagRef[]> {
       return []
     }
 
-    return [{ name, commitSha }]
+    return [
+      {
+        name: TagName.from(name, 'git for-each-ref refs/tags'),
+        commitSha: Sha.from(commitSha, 'git for-each-ref refs/tags'),
+      },
+    ]
   })
 }
 
-export async function resolveLocalTag(git: GitCommand, tag: string): Promise<string | null> {
+export async function resolveLocalTag(git: GitCommand, tag: string): Promise<Sha | null> {
   const sha = await git.readText(['rev-parse', '--verify', '--quiet', `refs/tags/${tag}^{commit}`])
-  return sha === null || sha.length === 0 ? null : sha
+  return sha === null || sha.length === 0 ? null : Sha.from(sha, `git rev-parse refs/tags/${tag}`)
 }
 
 export async function localTagExists(git: GitCommand, tag: string): Promise<boolean> {
   return (await resolveLocalTag(git, tag)) !== null
 }
 
-function parseLsRemote(output: string, refPrefix: string): Map<string, string> {
-  const shaByName = new Map<string, string>()
+function parseLsRemote(output: string, refPrefix: string): Map<string, Sha> {
+  const shaByName = new Map<string, Sha>()
 
   for (const line of splitLines(output)) {
     const [sha, ref] = line.split(/\s+/)
@@ -59,13 +67,15 @@ function parseLsRemote(output: string, refPrefix: string): Map<string, string> {
 
     const name = ref.slice(refPrefix.length)
 
+    const objectSha = Sha.from(sha, 'git ls-remote')
+
     if (name.endsWith(PEELED_SUFFIX)) {
-      shaByName.set(name.slice(0, -PEELED_SUFFIX.length), sha)
+      shaByName.set(name.slice(0, -PEELED_SUFFIX.length), objectSha)
       continue
     }
 
     if (!shaByName.has(name)) {
-      shaByName.set(name, sha)
+      shaByName.set(name, objectSha)
     }
   }
 
@@ -79,14 +89,17 @@ export async function listRemoteTags(git: GitCommand, remote: string): Promise<G
     return []
   }
 
-  return [...parseLsRemote(output, 'refs/tags/')].map(([name, commitSha]) => ({ name, commitSha }))
+  return [...parseLsRemote(output, 'refs/tags/')].map(([name, commitSha]) => ({
+    name: TagName.from(name, 'git ls-remote --tags'),
+    commitSha,
+  }))
 }
 
 export async function resolveRemoteTag(
   git: GitCommand,
   remote: string,
   tag: string,
-): Promise<string | null> {
+): Promise<Sha | null> {
   const output = await git.readText([
     'ls-remote',
     '--tags',
@@ -114,7 +127,7 @@ export async function readRemoteBranchSha(
   git: GitCommand,
   remote: string,
   branch: string,
-): Promise<string | null> {
+): Promise<Sha | null> {
   const output = await git.readText(['ls-remote', remote, `refs/heads/${branch}`])
 
   if (output === null) {
@@ -126,8 +139,8 @@ export async function readRemoteBranchSha(
 
 export async function isAncestor(
   git: GitCommand,
-  ancestor: string,
-  descendant: string,
+  ancestor: Revision,
+  descendant: Revision,
 ): Promise<boolean> {
   const result = await git.run(['merge-base', '--is-ancestor', ancestor, descendant])
   return result.exitCode === 0
@@ -137,7 +150,7 @@ export async function headExistsOnRemote(
   git: GitCommand,
   remote: string,
   branch: string,
-  headSha: string,
+  headSha: Sha,
 ): Promise<boolean> {
   const remoteSha = await readRemoteBranchSha(git, remote, branch)
 
@@ -157,13 +170,13 @@ function toReleaseTag(tag: GitTagRef, tagPrefix: string): ReleaseTag | null {
     return null
   }
 
-  const version = semver.valid(tag.name.slice(tagPrefix.length))
+  const candidate = tag.name.slice(tagPrefix.length)
 
-  if (version === null) {
+  if (semver.valid(candidate) === null) {
     return null
   }
 
-  return { ref: tag.name, sha: tag.commitSha, version }
+  return { ref: tag.name, sha: tag.commitSha, version: parseVersion(candidate, 'the tag version') }
 }
 
 /**
@@ -185,7 +198,7 @@ export async function findPreviousRelease(
     .toSorted((left, right) => semver.rcompare(left.version, right.version))
 
   const ancestry = await Promise.all(
-    candidates.map((candidate) => isAncestor(git, candidate.sha, 'HEAD')),
+    candidates.map((candidate) => isAncestor(git, candidate.sha, HEAD_REF)),
   )
 
   return candidates.find((_, index) => ancestry[index] === true) ?? null

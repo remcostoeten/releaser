@@ -1,13 +1,26 @@
 import type { CommitSummary } from '../domain/changes.js'
+import {
+  Iso8601,
+  type RepoRelativePath,
+  RepoRelativePath as Path,
+  type Revision,
+  Sha as Commit,
+} from '../domain/semantic.js'
 import { type GitCommand, splitNulSeparated } from './git-command.js'
 
 export type CommitRange = {
-  from: string | null
-  to: string
+  from: Revision | null
+  to: Revision
 }
 
 const UNIT_SEPARATOR = '\u001f'
 const COMMIT_FORMAT = '--format=%H%x1f%P%x1f%an%x1f%aI%x1f%s%x1f%b'
+
+function toPaths(output: string, context: string): RepoRelativePath[] {
+  return splitNulSeparated(output)
+    .map((path) => Path.from(path, context))
+    .toSorted()
+}
 
 export function formatRange(range: CommitRange): string {
   return range.from === null ? range.to : `${range.from}..${range.to}`
@@ -27,14 +40,19 @@ export function parseCommitRecords(output: string): CommitSummary[] {
       return []
     }
 
+    const context = 'git log'
+
     return [
       {
-        sha: sha.trim(),
+        sha: Commit.from(sha.trim(), context),
         subject,
         body: (body ?? '').replace(/\n+$/, ''),
         author,
-        authoredAt,
-        parents: parents.length === 0 ? [] : parents.split(' '),
+        authoredAt: Iso8601.from(authoredAt, context),
+        parents:
+          parents.length === 0
+            ? []
+            : parents.split(' ').map((parent) => Commit.from(parent, context)),
       },
     ]
   })
@@ -50,12 +68,15 @@ export async function readCommits(git: GitCommand, range: CommitRange): Promise<
   return parseCommitRecords(result.stdout)
 }
 
-export async function readChangedFiles(git: GitCommand, range: CommitRange): Promise<string[]> {
+export async function readChangedFiles(
+  git: GitCommand,
+  range: CommitRange,
+): Promise<RepoRelativePath[]> {
   if (range.from === null) {
     const tracked = await git.runOrThrow(['ls-tree', '-r', '--name-only', '-z', range.to])
-    return splitNulSeparated(tracked.stdout).toSorted()
+    return toPaths(tracked.stdout, 'git ls-tree')
   }
 
   const result = await git.runOrThrow(['diff', '--name-only', '-z', `${range.from}..${range.to}`])
-  return splitNulSeparated(result.stdout).toSorted()
+  return toPaths(result.stdout, 'git diff --name-only')
 }

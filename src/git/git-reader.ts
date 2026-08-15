@@ -4,6 +4,13 @@ import {
   type RepositoryFingerprint,
   type RepositoryState,
 } from '../domain/repository.js'
+import {
+  AbsolutePath,
+  type Sha,
+  type SemVer,
+  type BranchName,
+  type RepoRelativePath,
+} from '../domain/semantic.js'
 import type { CommandRunner } from '../shared/command-runner.js'
 import { createGitCommand, type GitCommand } from './git-command.js'
 import type { CommitRange } from './git-history.js'
@@ -47,24 +54,27 @@ export type GitReader = {
   command: GitCommand
   locate(): Promise<GitRepositoryLocation>
   readState(): Promise<GitStateLookup>
-  readFingerprint(manifestVersion: string): Promise<RepositoryFingerprint>
+  readFingerprint(manifestVersion: SemVer): Promise<RepositoryFingerprint>
   readRemoteRepository(): Promise<RemoteRepository | null>
   listLocalTags(): Promise<GitTagRef[]>
   listRemoteTags(): Promise<GitTagRef[]>
   localTagExists(tag: string): Promise<boolean>
   remoteTagExists(tag: string): Promise<boolean>
-  resolveLocalTag(tag: string): Promise<string | null>
-  resolveRemoteTag(tag: string): Promise<string | null>
-  readRemoteBranchSha(branch: string): Promise<string | null>
-  headExistsOnRemote(branch: string, headSha: string): Promise<boolean>
+  resolveLocalTag(tag: string): Promise<Sha | null>
+  resolveRemoteTag(tag: string): Promise<Sha | null>
+  readRemoteBranchSha(branch: BranchName): Promise<Sha | null>
+  headExistsOnRemote(branch: BranchName, headSha: Sha): Promise<boolean>
   findPreviousRelease(tagPrefix: string): Promise<ReleaseTag | null>
   readCommits(range: CommitRange): Promise<CommitSummary[]>
-  readChangedFiles(range: CommitRange): Promise<string[]>
+  readChangedFiles(range: CommitRange): Promise<RepoRelativePath[]>
 }
 
 async function readRepositoryState(git: GitCommand, remote: string): Promise<RepositoryState> {
   const location = await locateRepository(git, git.cwd)
-  const root = location.kind === 'not-a-repository' ? git.cwd : location.root
+  const root =
+    location.kind === 'not-a-repository'
+      ? AbsolutePath.from(git.cwd, 'the working directory')
+      : location.root
 
   return {
     root,

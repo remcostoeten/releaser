@@ -1,22 +1,23 @@
 import type { GitCommitAction, GitTagAction } from '../domain/actions.js'
 import { TagExists } from '../domain/errors.js'
+import type { BranchName, Sha, TagName } from '../domain/semantic.js'
 import type { GitCommand } from './git-command.js'
 import { readRemoteBranchSha, resolveLocalTag, resolveRemoteTag } from './git-refs.js'
 import { readHeadSha } from './git-status.js'
 
 export type CommitWriteOutcome = {
   kind: 'created' | 'skipped'
-  sha: string
+  sha: Sha
 }
 
 export type TagWriteOutcome = {
   kind: 'created' | 'skipped'
-  sha: string
+  sha: Sha
 }
 
 export type PushWriteOutcome = {
   kind: 'pushed' | 'skipped'
-  sha: string
+  sha: Sha
 }
 
 async function readHeadMessage(git: GitCommand): Promise<string> {
@@ -63,7 +64,7 @@ export async function createReleaseCommit(
 export async function createAnnotatedTag(
   git: GitCommand,
   action: GitTagAction,
-  targetSha: string,
+  targetSha: Sha,
 ): Promise<TagWriteOutcome> {
   const existing = await resolveLocalTag(git, action.name)
 
@@ -82,8 +83,8 @@ export async function createAnnotatedTag(
 export async function pushBranch(
   git: GitCommand,
   remote: string,
-  branch: string,
-  expectedSha: string,
+  branch: BranchName,
+  expectedSha: Sha,
 ): Promise<PushWriteOutcome> {
   if ((await readRemoteBranchSha(git, remote, branch)) === expectedSha) {
     return { kind: 'skipped', sha: expectedSha }
@@ -97,8 +98,8 @@ export async function pushBranch(
 export async function pushTag(
   git: GitCommand,
   remote: string,
-  tag: string,
-  expectedSha: string,
+  tag: TagName,
+  expectedSha: Sha,
 ): Promise<PushWriteOutcome> {
   const published = await resolveRemoteTag(git, remote, tag)
 

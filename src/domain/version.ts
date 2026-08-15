@@ -1,5 +1,6 @@
 import semver from 'semver'
-import { InvalidVersion, VersionNotIncreasing } from './errors.js'
+import { ConfigurationError, InvalidVersion, VersionNotIncreasing } from './errors.js'
+import { DistTagName, SemVer } from './semantic.js'
 
 export type BumpKind = 'patch' | 'minor' | 'major' | 'prerelease'
 
@@ -10,12 +11,12 @@ export type VersionSelection =
 
 export type DistTag =
   | { kind: 'latest' }
-  | { kind: 'prerelease'; tag: string; source: 'identifier' | 'fallback' }
-  | { kind: 'explicit'; tag: string }
+  | { kind: 'prerelease'; tag: DistTagName; source: 'identifier' | 'fallback' }
+  | { kind: 'explicit'; tag: DistTagName }
 
 export type ReleaseVersion = {
-  previousVersion: string
-  nextVersion: string
+  previousVersion: SemVer
+  nextVersion: SemVer
   selection: VersionSelection
   distTag: DistTag
   prerelease: boolean
@@ -28,20 +29,21 @@ export type ResolveReleaseVersionInput = {
   explicitDistTag: string | null
 }
 
-const PRERELEASE_FALLBACK_TAG = 'next'
+const PRERELEASE_FALLBACK_TAG = DistTagName.from('next', 'the built-in prerelease fallback')
+const LATEST_TAG = DistTagName.from('latest', 'the built-in default dist-tag')
 
 export function isValidVersion(version: string): boolean {
   return semver.valid(version) !== null
 }
 
-export function parseVersion(version: string, label = 'version'): string {
+export function parseVersion(version: string, label = 'version'): SemVer {
   const parsed = semver.valid(version)
 
   if (parsed === null) {
     throw new InvalidVersion(version, `${label} is not valid SemVer`)
   }
 
-  return parsed
+  return SemVer.from(parsed, label)
 }
 
 export function compareVersions(left: string, right: string): -1 | 0 | 1 {
@@ -57,14 +59,18 @@ export function isPrerelease(version: string): boolean {
   return components !== null && components.length > 0
 }
 
-export function highestVersion(versions: readonly string[]): string | null {
+export function highestVersion(versions: readonly string[]): SemVer | null {
   const valid = versions.filter((version) => isValidVersion(version))
 
   if (valid.length === 0) {
     return null
   }
 
-  return valid.reduce((highest, candidate) => (semver.gt(candidate, highest) ? candidate : highest))
+  const highest = valid.reduce((winner, candidate) =>
+    semver.gt(candidate, winner) ? candidate : winner,
+  )
+
+  return parseVersion(highest, 'published version')
 }
 
 export function versionParts(version: string): { major: string; minor: string; patch: string } {
@@ -86,7 +92,7 @@ export function meetsMinimum(version: string, minimum: string): boolean {
   return semver.gte(coerced, parseVersion(minimum, 'minimum version'))
 }
 
-export function bumpVersion(current: string, selection: VersionSelection): string {
+export function bumpVersion(current: string, selection: VersionSelection): SemVer {
   const base = parseVersion(current, 'current version')
 
   if (selection.kind === 'custom') {
@@ -104,18 +110,18 @@ export function bumpVersion(current: string, selection: VersionSelection): strin
     throw new InvalidVersion(current, 'could not be incremented')
   }
 
-  return next
+  return SemVer.from(next, 'the incremented version')
 }
 
 export function derivePrereleaseTag(version: string): {
-  tag: string
+  tag: DistTagName
   source: 'identifier' | 'fallback'
 } {
   const components = semver.prerelease(parseVersion(version))
   const first = components?.[0]
 
   if (typeof first === 'string' && first.length > 0) {
-    return { tag: first, source: 'identifier' }
+    return { tag: DistTagName.from(first, 'the prerelease identifier'), source: 'identifier' }
   }
 
   return { tag: PRERELEASE_FALLBACK_TAG, source: 'fallback' }
@@ -128,7 +134,15 @@ export function resolveDistTag(version: string, explicitDistTag: string | null):
     if (prerelease && explicitDistTag === 'latest') {
       throw new InvalidVersion(version, 'a prerelease must not be published to the latest dist-tag')
     }
-    return { kind: 'explicit', tag: explicitDistTag }
+    const tag = DistTagName.parse(explicitDistTag)
+
+    if (tag === null) {
+      throw new ConfigurationError(`${explicitDistTag} is not a usable npm dist-tag`, {
+        tag: explicitDistTag,
+      })
+    }
+
+    return { kind: 'explicit', tag }
   }
 
   if (!prerelease) {
@@ -139,8 +153,8 @@ export function resolveDistTag(version: string, explicitDistTag: string | null):
   return { kind: 'prerelease', tag: derived.tag, source: derived.source }
 }
 
-export function distTagName(distTag: DistTag): string {
-  return distTag.kind === 'latest' ? 'latest' : distTag.tag
+export function distTagName(distTag: DistTag): DistTagName {
+  return distTag.kind === 'latest' ? LATEST_TAG : distTag.tag
 }
 
 /**

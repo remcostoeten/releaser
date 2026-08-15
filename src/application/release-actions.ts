@@ -1,6 +1,7 @@
 import type { ReleaserConfig } from '../config/schema.js'
 import type { GitHubReleaseAction, NpmPublishAction } from '../domain/actions.js'
 import type { ReleaseBoundary } from '../domain/repository.js'
+import type { Sha, TagName } from '../domain/semantic.js'
 import { distTagName, type ReleaseVersion } from '../domain/version.js'
 import type {
   GitHubRepositoryRef,
@@ -9,7 +10,7 @@ import type {
   PreviousRelease,
 } from './ports.js'
 
-export function buildBoundary(headSha: string, previous: PreviousRelease | null): ReleaseBoundary {
+export function buildBoundary(headSha: Sha, previous: PreviousRelease | null): ReleaseBoundary {
   if (previous === null) {
     return { kind: 'initial', headSha }
   }
@@ -49,7 +50,7 @@ export function buildGitHubReleaseAction(input: {
   config: ReleaserConfig
   tokenStatus: GitHubTokenStatus
   githubRef: GitHubRepositoryRef | null
-  tagName: string
+  tagName: TagName
   prerelease: boolean
 }): GitHubReleaseAction {
   if (!input.config.github.release) {

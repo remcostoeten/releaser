@@ -1,25 +1,50 @@
 import { z } from 'zod'
 import { InvalidReleasePlan } from '../domain/errors.js'
 import type { ReleasePlan } from '../domain/release-plan.js'
+import {
+  AbsolutePath,
+  BranchName,
+  Digest,
+  DistTagName,
+  Iso8601,
+  PackageName,
+  PlanId,
+  RepoRelativePath,
+  SemVer,
+  type SemanticType,
+  Sha,
+  TagName,
+} from '../domain/semantic.js'
+
+/**
+ * Lifts a semantic type into a schema, so a plan read back from disk carries
+ * the same branded types it had in memory. Without this the journal would be
+ * the one place where a SHA and a tag name are interchangeable again.
+ */
+function semantic<Value extends string>(type: SemanticType<Value>): z.ZodType<Value> {
+  return z.custom<Value>((value) => typeof value === 'string' && type.is(value), {
+    message: `expected a valid ${type.name}`,
+  })
+}
 
 const repositoryFingerprintSchema = z.strictObject({
-  headSha: z.string(),
-  statusDigest: z.string(),
-  manifestVersion: z.string(),
-  upstreamSha: z.string().nullable(),
+  headSha: semantic(Sha),
+  statusDigest: semantic(Digest),
+  manifestVersion: semantic(SemVer),
+  upstreamSha: semantic(Sha).nullable(),
 })
 
 const releaseBoundarySchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('initial'),
-    headSha: z.string(),
+    headSha: semantic(Sha),
   }),
   z.strictObject({
     kind: z.literal('since-release'),
-    previousRef: z.string(),
-    previousSha: z.string(),
-    previousVersion: z.string(),
-    headSha: z.string(),
+    previousRef: semantic(TagName),
+    previousSha: semantic(Sha),
+    previousVersion: semantic(SemVer),
+    headSha: semantic(Sha),
   }),
 ])
 
@@ -42,15 +67,15 @@ const distTagSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('latest') }),
   z.strictObject({
     kind: z.literal('prerelease'),
-    tag: z.string(),
+    tag: semantic(DistTagName),
     source: z.enum(['identifier', 'fallback']),
   }),
-  z.strictObject({ kind: z.literal('explicit'), tag: z.string() }),
+  z.strictObject({ kind: z.literal('explicit'), tag: semantic(DistTagName) }),
 ])
 
 const releaseVersionSchema = z.strictObject({
-  previousVersion: z.string(),
-  nextVersion: z.string(),
+  previousVersion: semantic(SemVer),
+  nextVersion: semantic(SemVer),
   selection: versionSelectionSchema,
   distTag: distTagSchema,
   prerelease: z.boolean(),
@@ -70,21 +95,21 @@ const replacementPatternSchema = z.discriminatedUnion('kind', [
 const fileMutationSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('manifest-version'),
-    path: z.string(),
-    previousVersion: z.string(),
-    nextVersion: z.string(),
+    path: semantic(RepoRelativePath),
+    previousVersion: semantic(SemVer),
+    nextVersion: semantic(SemVer),
     edits: z.array(textEditSchema),
   }),
   z.strictObject({
     kind: z.literal('lockfile-version'),
-    path: z.string(),
-    previousVersion: z.string(),
-    nextVersion: z.string(),
+    path: semantic(RepoRelativePath),
+    previousVersion: semantic(SemVer),
+    nextVersion: semantic(SemVer),
     edits: z.array(textEditSchema),
   }),
   z.strictObject({
     kind: z.literal('configured-replacement'),
-    path: z.string(),
+    path: semantic(RepoRelativePath),
     pattern: replacementPatternSchema,
     expectedMatches: z.number().int().positive(),
     edits: z.array(textEditSchema),
@@ -92,11 +117,11 @@ const fileMutationSchema = z.discriminatedUnion('kind', [
 ])
 
 const changeOriginSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ kind: z.literal('commit'), sha: z.string() }),
+  z.strictObject({ kind: z.literal('commit'), sha: semantic(Sha) }),
   z.strictObject({
     kind: z.literal('pull-request'),
     number: z.number().int().positive(),
-    mergeCommitSha: z.string().nullable(),
+    mergeCommitSha: semantic(Sha).nullable(),
   }),
 ])
 
@@ -120,8 +145,8 @@ const changeSchema = z.strictObject({
 })
 
 const releaseNotesSchema = z.strictObject({
-  version: z.string(),
-  previousVersion: z.string().nullable(),
+  version: semantic(SemVer),
+  previousVersion: semantic(SemVer).nullable(),
   sections: z.array(
     z.strictObject({
       category: changeCategorySchema,
@@ -132,28 +157,28 @@ const releaseNotesSchema = z.strictObject({
 
 const gitCommitActionSchema = z.strictObject({
   message: z.string(),
-  paths: z.array(z.string()),
+  paths: z.array(semantic(RepoRelativePath)),
 })
 
 const gitTagActionSchema = z.strictObject({
-  name: z.string(),
+  name: semantic(TagName),
   message: z.string(),
 })
 
 const gitPushActionSchema = z.strictObject({
   remote: z.string(),
   target: z.discriminatedUnion('kind', [
-    z.strictObject({ kind: z.literal('branch'), branch: z.string() }),
-    z.strictObject({ kind: z.literal('tag'), tag: z.string() }),
+    z.strictObject({ kind: z.literal('branch'), branch: semantic(BranchName) }),
+    z.strictObject({ kind: z.literal('tag'), tag: semantic(TagName) }),
   ]),
 })
 
 const npmPublishActionSchema = z.discriminatedUnion('kind', [
   z.strictObject({
     kind: z.literal('publish'),
-    packageName: z.string(),
-    version: z.string(),
-    distTag: z.string(),
+    packageName: semantic(PackageName),
+    version: semantic(SemVer),
+    distTag: semantic(DistTagName),
     access: z.enum(['public', 'restricted']),
   }),
   z.strictObject({ kind: z.literal('skipped'), reason: z.string() }),
@@ -164,7 +189,7 @@ const githubReleaseActionSchema = z.discriminatedUnion('kind', [
     kind: z.literal('create'),
     owner: z.string(),
     repo: z.string(),
-    tagName: z.string(),
+    tagName: semantic(TagName),
     name: z.string(),
     body: z.string(),
     draft: z.boolean(),
@@ -176,10 +201,10 @@ const githubReleaseActionSchema = z.discriminatedUnion('kind', [
 export const releasePlanSchema = z
   .strictObject({
     schemaVersion: z.literal(1),
-    id: z.string(),
-    createdAt: z.string(),
-    repositoryRoot: z.string(),
-    packageName: z.string(),
+    id: semantic(PlanId),
+    createdAt: semantic(Iso8601),
+    repositoryRoot: semantic(AbsolutePath),
+    packageName: semantic(PackageName),
     fingerprint: repositoryFingerprintSchema,
     boundary: releaseBoundarySchema,
     version: releaseVersionSchema,

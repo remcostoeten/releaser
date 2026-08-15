@@ -1,4 +1,5 @@
 import type { Change, ChangeCategory } from './changes.js'
+import type { SemVer } from './semantic.js'
 
 export type ReleaseNotesSection = {
   category: ChangeCategory
@@ -6,12 +7,12 @@ export type ReleaseNotesSection = {
 }
 
 export type ReleaseNotes = {
-  version: string
-  previousVersion: string | null
+  version: SemVer
+  previousVersion: SemVer | null
   sections: ReleaseNotesSection[]
 }
 
-export function emptyReleaseNotes(version: string, previousVersion: string | null): ReleaseNotes {
+export function emptyReleaseNotes(version: SemVer, previousVersion: SemVer | null): ReleaseNotes {
   return { version, previousVersion, sections: [] }
 }
 

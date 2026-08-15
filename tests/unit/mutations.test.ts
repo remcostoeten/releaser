@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { repoPath, version } from '../helpers/semantic.js'
 import { applyEdits, editsApplyTo, mutatedPaths } from '../../src/domain/mutations.js'
 import { renderTemplate } from '../../src/application/render-template.js'
 
@@ -39,21 +40,21 @@ describe('mutatedPaths', () => {
     const paths = mutatedPaths([
       {
         kind: 'manifest-version',
-        path: 'package.json',
-        previousVersion: '1.2.3',
-        nextVersion: '1.2.4',
+        path: repoPath('package.json'),
+        previousVersion: version('1.2.3'),
+        nextVersion: version('1.2.4'),
         edits: [],
       },
       {
         kind: 'lockfile-version',
-        path: 'package-lock.json',
-        previousVersion: '1.2.3',
-        nextVersion: '1.2.4',
+        path: repoPath('package-lock.json'),
+        previousVersion: version('1.2.3'),
+        nextVersion: version('1.2.4'),
         edits: [],
       },
       {
         kind: 'configured-replacement',
-        path: 'package.json',
+        path: repoPath('package.json'),
         pattern: { kind: 'literal', value: '1.2.3' },
         expectedMatches: 1,
         edits: [],
@@ -70,7 +71,7 @@ describe('renderTemplate', () => {
       'v{{version}} (was {{previousVersion}}) {{major}}.{{minor}}.{{patch}}',
       {
         version: '2.3.4',
-        previousVersion: '2.3.3',
+        previousVersion: version('2.3.3'),
         major: '2',
         minor: '3',
         patch: '4',
@@ -84,7 +85,7 @@ describe('renderTemplate', () => {
     expect(
       renderTemplate('{{version}} {{unknown}}', {
         version: '1.0.0',
-        previousVersion: '0.9.0',
+        previousVersion: version('0.9.0'),
         major: '1',
         minor: '0',
         patch: '0',

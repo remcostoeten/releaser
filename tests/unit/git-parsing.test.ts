@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { formatRange, parseCommitRecords } from '../../src/git/git-history.js'
 import { parsePorcelainStatus } from '../../src/git/git-status.js'
 import { parseRemoteUrl } from '../../src/git/remote-url.js'
+import { ref, tag } from '../helpers/semantic.js'
 
 const UNIT = '\u001f'
 
@@ -34,8 +35,8 @@ describe('parsePorcelainStatus', () => {
 describe('parseCommitRecords', () => {
   it('preserves a multi-paragraph body', () => {
     const output = record([
-      'abc123',
-      'def456',
+      'a'.repeat(40),
+      'd'.repeat(40),
       'Ada',
       '2024-01-01T00:00:00+00:00',
       'feat: thing',
@@ -44,33 +45,43 @@ describe('parseCommitRecords', () => {
 
     expect(parseCommitRecords(output)).toEqual([
       {
-        sha: 'abc123',
+        sha: 'a'.repeat(40),
         subject: 'feat: thing',
         body: 'First paragraph.\n\nSecond paragraph.',
         author: 'Ada',
         authoredAt: '2024-01-01T00:00:00+00:00',
-        parents: ['def456'],
+        parents: ['d'.repeat(40)],
       },
     ])
   })
 
   it('reports a root commit as having no parents and a merge as having two', () => {
     const output =
-      record(['a', '', 'Ada', '2024-01-01T00:00:00+00:00', 'root', '']) +
-      record(['b', 'a c', 'Ada', '2024-01-01T00:00:00+00:00', 'merge', ''])
+      record(['a'.repeat(40), '', 'Ada', '2024-01-01T00:00:00+00:00', 'root', '']) +
+      record([
+        'b'.repeat(40),
+        `${'a'.repeat(40)} ${'c'.repeat(40)}`,
+        'Ada',
+        '2024-01-01T00:00:00+00:00',
+        'merge',
+        '',
+      ])
 
-    expect(parseCommitRecords(output).map((commit) => commit.parents)).toEqual([[], ['a', 'c']])
+    expect(parseCommitRecords(output).map((commit) => commit.parents)).toEqual([
+      [],
+      ['a'.repeat(40), 'c'.repeat(40)],
+    ])
   })
 
   it('ignores a truncated record', () => {
-    expect(parseCommitRecords(record(['a', '']))).toEqual([])
+    expect(parseCommitRecords(record(['a'.repeat(40), '']))).toEqual([])
   })
 })
 
 describe('formatRange', () => {
   it('renders an open range as the endpoint alone', () => {
-    expect(formatRange({ from: null, to: 'HEAD' })).toBe('HEAD')
-    expect(formatRange({ from: 'v1.0.0', to: 'HEAD' })).toBe('v1.0.0..HEAD')
+    expect(formatRange({ from: null, to: ref('HEAD') })).toBe('HEAD')
+    expect(formatRange({ from: tag('v1.0.0'), to: ref('HEAD') })).toBe('v1.0.0..HEAD')
   })
 })
 

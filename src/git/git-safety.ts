@@ -1,26 +1,27 @@
 import type { RepositoryState } from '../domain/repository.js'
+import type { BranchName, Sha, TagName } from '../domain/semantic.js'
 
 export type GitSafetyFinding =
   | { kind: 'dirty-working-tree'; entries: string[] }
-  | { kind: 'detached-head'; sha: string }
+  | { kind: 'detached-head'; sha: Sha }
   | { kind: 'missing-remote'; remote: string }
-  | { kind: 'wrong-branch'; expected: string; actual: string }
-  | { kind: 'no-upstream'; branch: string }
-  | { kind: 'behind-upstream'; branch: string; behind: number }
-  | { kind: 'diverged-from-upstream'; branch: string; ahead: number; behind: number }
-  | { kind: 'tag-exists-locally'; tag: string; sha: string }
-  | { kind: 'tag-exists-on-remote'; tag: string; remote: string; sha: string }
+  | { kind: 'wrong-branch'; expected: BranchName; actual: BranchName }
+  | { kind: 'no-upstream'; branch: BranchName }
+  | { kind: 'behind-upstream'; branch: BranchName; behind: number }
+  | { kind: 'diverged-from-upstream'; branch: BranchName; ahead: number; behind: number }
+  | { kind: 'tag-exists-locally'; tag: TagName; sha: Sha }
+  | { kind: 'tag-exists-on-remote'; tag: TagName; remote: string; sha: Sha }
 
 export type TagPresence = {
-  name: string
-  localSha: string | null
-  remoteSha: string | null
+  name: TagName
+  localSha: Sha | null
+  remoteSha: Sha | null
 }
 
 export type GitSafetyInput = {
   state: RepositoryState
   remote: string
-  releaseBranch: string | null
+  releaseBranch: BranchName | null
   tag: TagPresence | null
 }
 

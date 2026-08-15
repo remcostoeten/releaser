@@ -25,6 +25,24 @@ describe('redaction', () => {
     })
   })
 
+  it('keeps an error usable while redacting its message, stack and own fields', () => {
+    const redactor = createRedactor()
+    redactor.registerSecret('super-secret-value')
+    const error = Object.assign(new Error('failed with super-secret-value'), {
+      kind: 'CommandFailed',
+      details: { commandLine: 'npm publish --token super-secret-value' },
+    })
+
+    const redacted = redactor.redactValue(error)
+
+    expect(redacted).toBeInstanceOf(Error)
+    expect(redacted.message).toBe(`failed with ${REDACTED}`)
+    expect(redacted.stack).toContain(REDACTED)
+    expect(redacted.stack).not.toContain('super-secret-value')
+    expect(redacted.kind).toBe('CommandFailed')
+    expect(redacted.details).toEqual({ commandLine: `npm publish --token ${REDACTED}` })
+  })
+
   it('ignores short values that would over-redact', () => {
     const redactor = createRedactor()
     redactor.registerSecret('abc')

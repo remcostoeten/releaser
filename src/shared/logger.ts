@@ -27,6 +27,18 @@ function writeToStderr(line: string): void {
   process.stderr.write(`${line}\n`)
 }
 
+function expandErrors(_key: string, value: unknown): unknown {
+  if (!(value instanceof Error)) {
+    return value
+  }
+
+  return { ...value, name: value.name, message: value.message, stack: value.stack }
+}
+
+function serialize(value: unknown): string {
+  return JSON.stringify(value, expandErrors)
+}
+
 /**
  * Creates a logger. Human output and structured records both go to stderr, so
  * that stdout stays reserved for machine-readable `--json` payloads. Every
@@ -48,11 +60,11 @@ export function createLogger(options: LoggerOptions = {}): Logger {
     const safeData = data === undefined ? undefined : redactor.redactValue(data)
 
     if (json) {
-      write(JSON.stringify({ level: entryLevel, message: safeMessage, data: safeData ?? null }))
+      write(serialize({ level: entryLevel, message: safeMessage, data: safeData ?? null }))
       return
     }
 
-    const suffix = safeData === undefined ? '' : ` ${JSON.stringify(safeData)}`
+    const suffix = safeData === undefined ? '' : ` ${serialize(safeData)}`
     write(`${entryLevel}: ${safeMessage}${suffix}`)
   }
 

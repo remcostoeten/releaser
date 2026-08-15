@@ -1,0 +1,58 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "env": {
+    "builtin": true,
+    "node": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "pedantic": "warn"
+  },
+  "rules": {
+    "func-style": ["error", "declaration"],
+    "prefer-arrow-callback": "error",
+
+    "no-console": "error",
+    "no-empty": ["error", { "allowEmptyCatch": false }],
+    "no-unused-vars": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    "eqeqeq": ["error", "always"],
+
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/consistent-type-imports": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
+
+    "import/no-cycle": "error",
+    "import/no-default-export": "error",
+
+    "unicorn/no-null": "off",
+    "unicorn/no-process-exit": "off"
+  },
+  "ignorePatterns": ["dist", "coverage", "tests/fixtures"],
+  "overrides": [
+    {
+      "files": ["src/cli/**", "src/ui/**"],
+      "rules": {
+        "no-console": "off"
+      }
+    },
+    {
+      "files": ["tests/**"],
+      "rules": {
+        "typescript/no-non-null-assertion": "off",
+        "typescript/no-explicit-any": "off"
+      }
+    },
+    {
+      "files": ["vitest.config.ts"],
+      "rules": {
+        "import/no-default-export": "off"
+      }
+    }
+  ]
+}

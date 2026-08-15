@@ -117,13 +117,17 @@ describe('inspectGitSafety', () => {
     expect(inspectGitSafety(inputWith({ tag }))).toEqual([
       { kind: 'tag-exists-locally', tag: 'v1.0.0', sha: 'd'.repeat(40) },
     ])
-    expect(
-      inspectGitSafety(inputWith({ tag: { ...tag, remoteSha: 'e'.repeat(40) } })),
-    ).toContainEqual({
-      kind: 'tag-exists-on-remote',
-      tag: 'v1.0.0',
-      remote: 'origin',
-      sha: 'e'.repeat(40),
-    })
+
+    const both = inspectGitSafety(inputWith({ tag: { ...tag, remoteSha: 'e'.repeat(40) } }))
+
+    expect(both).toEqual([
+      { kind: 'tag-exists-locally', tag: 'v1.0.0', sha: 'd'.repeat(40) },
+      {
+        kind: 'tag-exists-on-remote',
+        tag: 'v1.0.0',
+        remote: 'origin',
+        sha: 'e'.repeat(40),
+      },
+    ])
   })
 })

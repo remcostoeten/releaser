@@ -30,4 +30,4 @@ Prepend this to each task:
 > Read `AGENTS.md` and `SPEC.md` first.
 > Inspect the existing implementation before adding to it.
 > Do not redesign completed areas unless this task requires it.
-> Run `pnpm check` before finishing, and fix everything it reports.
+> Run `bun run check` before finishing, and fix everything it reports.

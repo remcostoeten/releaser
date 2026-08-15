@@ -63,4 +63,4 @@ since a tag, commit messages containing newlines and quotes, detached HEAD,
 existing tag pointing elsewhere, branch ahead, branch behind, branch diverged,
 no upstream, no remote.
 
-Run `pnpm check`.
+Run `bun run check`.

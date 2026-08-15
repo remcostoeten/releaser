@@ -10,7 +10,7 @@ covers how to work; `SPEC.md` covers what to build.
 1. Read `SPEC.md` and this file.
 2. Inspect the existing implementation before adding to it.
 3. Do not redesign completed areas unless the task explicitly requires it.
-4. Run `pnpm check` before considering the work complete.
+4. Run `bun run check` before considering the work complete.
 
 ---
 
@@ -33,7 +33,7 @@ helpers. If you want to write an explanatory comment, rename something or
 extract a well-named function instead.
 
 Both rules are enforced by oxlint — `func-style: ["error", "declaration"]` and
-`prefer-arrow-callback`. They are not suggestions; `pnpm lint` fails on them.
+`prefer-arrow-callback`. They are not suggestions; `bun run lint` fails on them.
 
 Relative imports carry a `.js` extension, even when importing a `.ts` file —
 `import { run } from './command-runner.js'`. This is required by
@@ -82,15 +82,21 @@ Scenarios that must be covered:
 ## Development commands
 
 ```
-pnpm install       install dependencies
-pnpm typecheck     tsc --noEmit
-pnpm test          vitest run
-pnpm lint          oxlint
-pnpm format        oxfmt --write
-pnpm format:check  oxfmt --check
-pnpm build         tsc -p tsconfig.build.json
-pnpm check         all of the above
+bun install           install dependencies
+bun run typecheck     tsc --noEmit
+bun run test          vitest run
+bun run lint          oxlint
+bun run format        oxfmt --write
+bun run format:check  oxfmt --check
+bun run build         tsc -p tsconfig.build.json
+bun run check         all of the above
 ```
+
+Bun is the package manager and script runner. The `dev` script still goes
+through `tsx`, and the shipped CLI still runs on Node — the tool targets Node
+24, so development must exercise Node's module resolution rather than Bun's.
+Do not switch `dev` to `bun src/cli/index.ts`, and do not replace Vitest with
+`bun test`.
 
 Linting is oxlint, formatting is oxfmt — the oxc suite. Do not add ESLint,
 Prettier, or Biome. `.oxlintrc.json` and `.oxfmtrc.json` are the only
@@ -103,7 +109,7 @@ indentation byte-for-byte, and oxfmt canonicalizes JSON key order. A formatter
 run over the fixtures would rewrite the very bytes those tests assert on.
 Never remove that exemption, and never "fix" a fixture's formatting.
 
-Run `pnpm check` before finishing. Fix everything it reports; do not hand back
+Run `bun run check` before finishing. Fix everything it reports; do not hand back
 work with known failures and a note about them.
 
 ---

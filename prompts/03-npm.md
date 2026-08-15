@@ -71,7 +71,7 @@ dry-run command construction; dist-tag selection including prerelease defaults;
 `EOTP` handling; lifecycle-script failure; `EPUBLISHCONFLICT`.
 
 Mock the publish boundary for unit tests. If you add Verdaccio-backed
-integration tests, gate them behind an env flag so the default `pnpm test`
+integration tests, gate them behind an env flag so the default `bun run test`
 stays offline and fast.
 
-Run `pnpm check`.
+Run `bun run check`.

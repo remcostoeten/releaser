@@ -61,4 +61,4 @@ hosts; normal release creation; prerelease; draft; release already exists;
 repository not found; no token; invalid token; insufficient scope; 5xx and
 rate-limit responses; idempotent re-creation.
 
-Run `pnpm check`.
+Run `bun run check`.

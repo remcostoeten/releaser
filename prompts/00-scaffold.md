@@ -74,14 +74,14 @@ Dependency direction per `SPEC.md` §4.
 Both must work:
 
 ```sh
-pnpm dev --help
+bun run dev --help
 node dist/cli/index.js --help
 ```
 
 Then:
 
 ```sh
-pnpm install && pnpm typecheck && pnpm lint && pnpm test && pnpm build
+bun install && bun run check
 ```
 
 Fix all issues.

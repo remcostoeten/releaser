@@ -123,6 +123,6 @@ This is the highest-value test suite in the project.
 - `SIGINT` mid-execution leaves a resumable journal
 - no code path anywhere invokes `npm unpublish` — assert this
 
-Run `pnpm check`.
+Run `bun run check`.
 
 Do not implement the interactive wizard in this task.

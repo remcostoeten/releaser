@@ -78,4 +78,4 @@ during a full release; exit code for each class in §12.1; a full dry-run
 release end to end; a full mocked release end to end; a resumed release end to
 end.
 
-Run `pnpm check`.
+Run `bun run check`.

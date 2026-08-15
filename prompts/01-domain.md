@@ -73,6 +73,6 @@ the caller decides.
 - the planner performs no writes — assert against a recording fake, not by
   inspection
 
-Run `pnpm check`.
+Run `bun run check`.
 
 Do not continue into Git, npm, or GitHub implementation.

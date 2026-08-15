@@ -380,9 +380,15 @@ warning — a typo in a config key must not silently disable a safety check.
 Configuration is deliberately JSON, not TypeScript: loading a `.ts` config
 would require executing repository code before preflight has run.
 
+`releaseBranch` defaults to `null`, meaning "detect the remote's default
+branch" via `git symbolic-ref refs/remotes/<remote>/HEAD`, falling back to the
+current branch when that ref is absent. Do not hardcode `main` — repositories
+using `master` or a release branch would warn on every run. An explicit string
+pins it.
+
 ```jsonc
 {
-  "releaseBranch": "main",
+  "releaseBranch": null,
   "remote": "origin",
   "tagPrefix": "v",
   "commitMessage": "chore(release): {{version}}",

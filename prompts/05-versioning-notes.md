@@ -72,4 +72,4 @@ commit/PR deduplication; squash-merge PR association; categorization across
 every category; deterministic ordering; Markdown escaping of hostile commit
 messages; empty release boundary.
 
-Run `pnpm check`.
+Run `bun run check`.

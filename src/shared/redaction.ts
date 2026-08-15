@@ -65,16 +65,20 @@ export function createRedactor(): Redactor {
       return value.map((entry) => redactUnknown(entry, seen))
     }
 
-    if (value instanceof Error) {
-      const redactedError = new Error(redactText(value.message))
-      redactedError.name = value.name
-      return redactedError
-    }
-
     const result: Record<string, unknown> = {}
     for (const [key, entry] of Object.entries(value)) {
       result[key] = SENSITIVE_KEY_PATTERN.test(key) ? REDACTED : redactUnknown(entry, seen)
     }
+
+    if (value instanceof Error) {
+      const redactedError = new Error(redactText(value.message))
+      redactedError.name = value.name
+      if (value.stack !== undefined) {
+        redactedError.stack = redactText(value.stack)
+      }
+      return Object.assign(redactedError, result)
+    }
+
     return result
   }
 

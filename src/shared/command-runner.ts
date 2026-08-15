@@ -39,6 +39,13 @@ function describeFailure(error: unknown): string {
   return String(error)
 }
 
+function failureCode(error: unknown): string | null {
+  if (error instanceof Error && 'code' in error && typeof error.code === 'string') {
+    return error.code
+  }
+  return null
+}
+
 /**
  * Creates the process-execution boundary. This is the only module permitted to
  * import `execa`; every other module receives a `CommandRunner`.
@@ -49,7 +56,10 @@ function describeFailure(error: unknown): string {
  * additionally throws `CommandFailed` on a non-zero exit.
  *
  * Every captured stream, and the command line itself, is redacted before it is
- * returned.
+ * returned. The originating error is deliberately not attached as a `cause`:
+ * it carries the unredacted command line and captured output, which SPEC §14
+ * forbids from reaching an error's details. Its `code` — `ENOENT`, `EACCES` —
+ * is kept, because it is diagnostic and never secret.
  */
 export function createCommandRunner(options: CommandRunnerOptions = {}): CommandRunner {
   const redactor = options.redactor ?? defaultRedactor
@@ -100,6 +110,7 @@ export function createCommandRunner(options: CommandRunnerOptions = {}): Command
       }
       throw new CommandExecutionFailed(command, redactor.redactText(describeFailure(error)), {
         commandLine,
+        code: failureCode(error),
       })
     }
   }

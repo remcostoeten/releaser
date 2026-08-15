@@ -14,3 +14,13 @@ describe('releaser --help', () => {
     }
   })
 })
+
+describe('a command with no implementation', () => {
+  it('exits non-zero so a caller cannot read the stub as success', async () => {
+    const result = await execa('npx', ['tsx', CLI_ENTRY, 'plan'], { reject: false })
+
+    expect(result.exitCode).not.toBe(0)
+    expect(result.stderr).toContain('not implemented yet')
+    expect(result.stdout).toBe('')
+  })
+})

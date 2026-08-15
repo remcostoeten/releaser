@@ -32,6 +32,16 @@ function formatCommandLine(command: string, args: string[]): string {
   return [command, ...args].join(' ')
 }
 
+function redactArgs(args: string[], redactor: Redactor): string[] {
+  return args.map((argument, index) => {
+    const previous = args[index - 1]
+    if (previous === '--otp') {
+      return '[redacted]'
+    }
+    return redactor.redactText(argument)
+  })
+}
+
 function describeFailure(error: unknown): string {
   if (error instanceof Error) {
     return error.message
@@ -97,7 +107,7 @@ export function createCommandRunner(options: CommandRunnerOptions = {}): Command
 
       return {
         command,
-        args,
+        args: redactArgs(args, redactor),
         commandLine,
         exitCode: result.exitCode,
         stdout: redactor.redactText(String(result.stdout ?? '')),

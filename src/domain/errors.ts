@@ -137,12 +137,30 @@ export class NpmAuthFailed extends ReleaserError {
   readonly remediation = 'Run `npm login` or set NODE_AUTH_TOKEN.'
 }
 
+export class NpmRegistryUnavailable extends ReleaserError {
+  readonly kind = 'NpmRegistryUnavailable'
+  readonly remediation = 'Check the configured npm registry and network connection, then retry.'
+
+  constructor(message: string) {
+    super(`npm registry is unavailable: ${message}`)
+  }
+}
+
+export class InvalidPackageManifest extends ReleaserError {
+  readonly kind = 'InvalidPackageManifest'
+  readonly remediation = 'Fix package.json and retry.'
+
+  constructor(path: string, issues: unknown) {
+    super(`Package manifest is invalid: ${path}`, { path, issues })
+  }
+}
+
 export class OtpRequired extends ReleaserError {
   readonly kind = 'OtpRequired'
   readonly remediation = 'Provide an OTP with --otp or use an automation token.'
 
-  constructor() {
-    super('npm requires a one-time password')
+  constructor(canRetryWithOtp: boolean) {
+    super('npm requires a one-time password', { canRetryWithOtp })
   }
 }
 

@@ -10,6 +10,8 @@ import type {
   OutputEnvironment,
   PlanReportView,
   DoctorReportView,
+  DryRunSummaryView,
+  ProgressEventView,
   StatusReportView,
   ScanReportView,
   SemanticState,
@@ -40,6 +42,15 @@ const ACTION_STATES: Record<ActionRowView['status'], SemanticState> = {
   skipped: 'warning',
   failed: 'failure',
   verified: 'success',
+}
+
+const PROGRESS_STATES: Record<ProgressEventView['status'], SemanticState> = {
+  active: 'active',
+  completed: 'success',
+  skipped: 'warning',
+  verified: 'success',
+  unknown: 'warning',
+  failed: 'failure',
 }
 
 export function renderHeading(title: string, environment: OutputEnvironment): string {
@@ -186,6 +197,33 @@ export function renderSuccessSummary(
     lines.push('', styleText(sanitizeTerminalText(view.journalPath), 'muted', environment))
   }
   return lines.join('\n')
+}
+
+export function renderProgressEvent(
+  view: ProgressEventView,
+  environment: OutputEnvironment,
+): string {
+  const position = view.position === null ? '' : `${view.position}. `
+  const status = styleText(view.status, PROGRESS_STATES[view.status], environment)
+  const detail = view.detail ? ` — ${sanitizeTerminalText(view.detail)}` : ''
+  return `${position}${sanitizeTerminalText(view.label)} [${status}]${detail}`
+}
+
+export function renderDryRunSummary(
+  view: DryRunSummaryView,
+  environment: OutputEnvironment,
+): string {
+  const packageDetails = renderKeyValueRows(view.packageRows, environment)
+  return [
+    styleText('Dry run complete — nothing was written', 'success', environment),
+    packageDetails,
+    `npm publish: ${sanitizeTerminalText(view.publishDetail)}`,
+    '',
+    renderHeading('File changes', environment),
+    renderFileDiffs(view.files, environment),
+  ]
+    .filter((section, index) => section.length > 0 || index === 3)
+    .join('\n')
 }
 
 export function renderPlanReport(view: PlanReportView, environment: OutputEnvironment): string {

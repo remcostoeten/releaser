@@ -96,3 +96,18 @@ export type ScanReportView = {
   version: string
   occurrences: readonly OccurrenceView[]
 }
+
+export type ProgressStatus = 'active' | 'completed' | 'skipped' | 'verified' | 'unknown' | 'failed'
+
+export type ProgressEventView = {
+  position: number | null
+  label: string
+  status: ProgressStatus
+  detail?: string
+}
+
+export type DryRunSummaryView = {
+  packageRows: readonly KeyValueRow[]
+  files: readonly FileDiffView[]
+  publishDetail: string
+}

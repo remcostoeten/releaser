@@ -4,6 +4,7 @@ import { compareFingerprints } from '../domain/repository.js'
 import { STAGE_ORDER, type StageName } from '../domain/stages.js'
 import type { JournalSession } from '../journal/storage.js'
 import type { JournalEntry, ReleaseJournal } from '../journal/types.js'
+import { noop } from '../shared/noop.js'
 import type {
   ExecutionContext,
   ExecutionDependencies,
@@ -18,7 +19,22 @@ export type ExecuteReleasePlanOptions = {
   otp?: string
   requestOtp?: () => Promise<string | null>
   afterStage?: (stage: StageName) => Promise<void>
+  onEvent?: (event: ExecutionEvent) => void | Promise<void>
 }
+
+export type ExecutionEvent =
+  | Readonly<{ kind: 'stage-started'; stage: StageName }>
+  | Readonly<{
+      kind: 'stage-skipped'
+      stage: StageName
+      reason: string
+      verification: 'disabled' | 'already-complete' | 'dry-run'
+    }>
+  | Readonly<{ kind: 'publish-outcome-unknown'; stage: 'npm-publish' }>
+  | Readonly<{ kind: 'stage-succeeded'; stage: StageName; reason?: string }>
+  | Readonly<{ kind: 'stage-failed'; stage: StageName; reason?: string }>
+  | Readonly<{ kind: 'release-completed' }>
+  | Readonly<{ kind: 'dry-run-completed' }>
 
 export type ExecutedStage = Readonly<{
   stage: StageName
@@ -41,6 +57,16 @@ function isPlanStage(plan: ReleasePlan, stage: StageName): boolean {
   return planStages(plan).includes(stage)
 }
 
+function disabledStageReason(plan: ReleasePlan, stage: StageName): string {
+  if (stage === 'npm-publish' && plan.npmPublish.kind === 'skipped') {
+    return plan.npmPublish.reason
+  }
+  if (stage === 'github-release' && plan.githubRelease.kind === 'skipped') {
+    return plan.githubRelease.reason
+  }
+  return 'disabled by plan'
+}
+
 function updateContext(context: ExecutionContext, value: StageCheck | StageWrite): void {
   if ('releaseCommitSha' in value && value.releaseCommitSha !== undefined) {
     context.releaseCommitSha = value.releaseCommitSha
@@ -60,6 +86,47 @@ function remainingStages(plan: ReleasePlan, failedStage: StageName): StageName[]
   return planned.slice(planned.indexOf(failedStage) + 1)
 }
 
+function detailReason(details: unknown, fallback: string): string {
+  if (
+    typeof details === 'object' &&
+    details !== null &&
+    'reason' in details &&
+    typeof details.reason === 'string'
+  ) {
+    return details.reason
+  }
+  return fallback
+}
+
+async function emit(options: ExecuteReleasePlanOptions, event: ExecutionEvent): Promise<void> {
+  try {
+    await options.onEvent?.(event)
+  } catch {
+    noop()
+  }
+}
+
+async function emitDryRunProgress(
+  plan: ReleasePlan,
+  options: ExecuteReleasePlanOptions,
+): Promise<void> {
+  async function emitStage(index: number): Promise<void> {
+    const stage = STAGE_ORDER[index]
+    if (stage === undefined) {
+      return
+    }
+    await emit(options, {
+      kind: 'stage-skipped',
+      stage,
+      reason: isPlanStage(plan, stage) ? 'dry run; no write' : disabledStageReason(plan, stage),
+      verification: isPlanStage(plan, stage) ? 'dry-run' : 'disabled',
+    })
+    await emitStage(index + 1)
+  }
+  await emitStage(0)
+  await emit(options, { kind: 'dry-run-completed' })
+}
+
 async function assertInitialFingerprint(
   deps: ExecutionDependencies,
   plan: ReleasePlan,
@@ -75,11 +142,18 @@ async function appendFailure(
   journal: JournalSession,
   stage: StageName,
   error: unknown,
+  options: ExecuteReleasePlanOptions,
+  eventReason?: string,
 ): Promise<void> {
   await journal.append({
     stage,
     outcome: 'failed',
     details: { message: error instanceof Error ? error.message : String(error) },
+  })
+  await emit(options, {
+    kind: 'stage-failed',
+    stage,
+    ...(eventReason === undefined ? {} : { reason: eventReason }),
   })
 }
 
@@ -90,23 +164,46 @@ async function runOrdinaryStage(
   state: RunState,
   options: ExecuteReleasePlanOptions,
 ): Promise<void> {
-  const check = await port.check(plan, state.context)
+  let check: StageCheck
+  try {
+    check = await port.check(plan, state.context)
+  } catch (error) {
+    await appendFailure(state.journal, stage, error, options)
+    if (state.npmPublished) {
+      throw new PartialRelease(
+        completedStages(state.results),
+        stage,
+        remainingStages(plan, stage),
+        `releaser resume --cwd ${JSON.stringify(plan.repositoryRoot)}`,
+        error instanceof Error ? error.message : String(error),
+      )
+    }
+    throw error
+  }
   updateContext(state.context, check)
   if (check.kind === 'complete') {
     await state.journal.append({ stage, outcome: 'skipped', details: check.details })
     state.results.push({ stage, outcome: 'skipped', details: check.details })
+    await emit(options, {
+      kind: 'stage-skipped',
+      stage,
+      reason: detailReason(check.details, 'already complete; verified'),
+      verification: 'already-complete',
+    })
     await options.afterStage?.(stage)
     return
   }
 
   await state.journal.append({ stage, outcome: 'running' })
+  await emit(options, { kind: 'stage-started', stage })
   let written: StageWrite
   try {
     written = await port.write(plan, state.context)
     updateContext(state.context, written)
     await state.journal.append({ stage, outcome: 'succeeded', details: written.details })
+    await emit(options, { kind: 'stage-succeeded', stage })
   } catch (error) {
-    await appendFailure(state.journal, stage, error)
+    await appendFailure(state.journal, stage, error, options)
     if (state.npmPublished) {
       throw new PartialRelease(
         completedStages(state.results),
@@ -133,7 +230,14 @@ async function resolvePublishFailure(
     outcome: 'unknown',
     details: { message: error instanceof Error ? error.message : String(error) },
   })
-  const checked = await statePublishCheck(plan, state)
+  await emit(options, { kind: 'publish-outcome-unknown', stage: 'npm-publish' })
+  let checked: StageCheck
+  try {
+    checked = await statePublishCheck(plan, state)
+  } catch (verificationError) {
+    await appendFailure(state.journal, 'npm-publish', verificationError, options)
+    throw verificationError
+  }
   if (checked.kind === 'complete') {
     updateContext(state.context, checked)
     await state.journal.append({
@@ -143,6 +247,11 @@ async function resolvePublishFailure(
     })
     state.results.push({ stage: 'npm-publish', outcome: 'succeeded', details: checked.details })
     state.npmPublished = true
+    await emit(options, {
+      kind: 'stage-succeeded',
+      stage: 'npm-publish',
+      reason: 'registry confirms publication',
+    })
     await options.afterStage?.('npm-publish')
     return 'landed'
   }
@@ -160,16 +269,29 @@ async function runPublishStage(
   state: PublishRunState,
   options: ExecuteReleasePlanOptions,
 ): Promise<void> {
-  const check = await state.publishPort.check(plan, state.context)
+  let check: StageCheck
+  try {
+    check = await state.publishPort.check(plan, state.context)
+  } catch (error) {
+    await appendFailure(state.journal, 'npm-publish', error, options)
+    throw error
+  }
   if (check.kind === 'complete') {
     await state.journal.append({ stage: 'npm-publish', outcome: 'skipped', details: check.details })
     state.results.push({ stage: 'npm-publish', outcome: 'skipped', details: check.details })
     state.npmPublished = true
+    await emit(options, {
+      kind: 'stage-skipped',
+      stage: 'npm-publish',
+      reason: detailReason(check.details, 'already published; verified'),
+      verification: 'already-complete',
+    })
     await options.afterStage?.('npm-publish')
     return
   }
 
   await state.journal.append({ stage: 'npm-publish', outcome: 'running' })
+  await emit(options, { kind: 'stage-started', stage: 'npm-publish' })
   async function attempt(otp: string | undefined, otpRetried: boolean): Promise<void> {
     let written: StageWrite
     try {
@@ -182,6 +304,7 @@ async function runPublishStage(
         outcome: 'succeeded',
         details: written.details,
       })
+      await emit(options, { kind: 'stage-succeeded', stage: 'npm-publish' })
     } catch (error) {
       if ((await resolvePublishFailure(plan, state, error, options)) === 'landed') {
         return
@@ -197,11 +320,18 @@ async function runPublishStage(
         if (requested !== null) {
           otp = requested
           await state.journal.append({ stage: 'npm-publish', outcome: 'running' })
+          await emit(options, { kind: 'stage-started', stage: 'npm-publish' })
           return attempt(otp, true)
         }
       }
 
-      await appendFailure(state.journal, 'npm-publish', error)
+      await appendFailure(
+        state.journal,
+        'npm-publish',
+        error,
+        options,
+        'registry confirms version is absent; release stopped',
+      )
       if (error instanceof OtpRequired && options.interactive !== true) {
         throw new OtpRequired(false)
       }
@@ -238,8 +368,15 @@ async function executeStages(
       return
     }
     if (!isPlanStage(plan, stage)) {
-      await journal.append({ stage, outcome: 'skipped', details: { reason: 'disabled by plan' } })
-      state.results.push({ stage, outcome: 'skipped', details: { reason: 'disabled by plan' } })
+      const reason = disabledStageReason(plan, stage)
+      await journal.append({ stage, outcome: 'skipped', details: { reason } })
+      state.results.push({ stage, outcome: 'skipped', details: { reason } })
+      await emit(options, {
+        kind: 'stage-skipped',
+        stage,
+        reason,
+        verification: 'disabled',
+      })
     } else if (stage === 'npm-publish') {
       await runPublishStage(plan, state, options)
     } else {
@@ -250,6 +387,7 @@ async function executeStages(
 
   await runStage(0)
   await journal.complete()
+  await emit(options, { kind: 'release-completed' })
   return { kind: 'completed', stages: state.results, journalPath: journal.paths.journal }
 }
 
@@ -269,6 +407,7 @@ export async function executeReleasePlan(
       plan.npmPublish.kind === 'publish'
         ? await deps.dryRun.publishDryRun(plan)
         : { skipped: true, reason: plan.npmPublish.reason }
+    await emitDryRunProgress(plan, options)
     return { kind: 'dry-run', fileDiff, packageInspection, publishInspection }
   }
 

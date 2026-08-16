@@ -3,6 +3,7 @@ import { createExecutionDependencies } from '../application/create-execution-dep
 import { createNotesReader } from '../application/create-notes-reader.js'
 import { createReleasePlan } from '../application/create-release-plan.js'
 import { executeReleasePlan, resumeWithSession } from '../application/execute-release-plan.js'
+import type { ExecutionEvent } from '../application/execute-release-plan.js'
 import type { CreateReleasePlanResult } from '../application/create-release-plan.js'
 import { loadConfig } from '../config/load.js'
 import { isBlocked, unoverridableBlockers } from '../domain/checks.js'
@@ -37,6 +38,8 @@ export type ReleaseCommandOptions = {
   otp?: string
   requestOtp?: () => Promise<string | null>
   acceptedOverrideCheckIds?: readonly ReleaseCheckId[]
+  onExecutionEvent?: (event: ExecutionEvent) => void | Promise<void>
+  onResumePlan?: (plan: ReleasePlan) => void
 }
 
 function versionSelection(options: ReleaseCommandOptions): VersionSelection {
@@ -235,6 +238,7 @@ export async function executePlannedRelease(plan: ReleasePlan, options: ReleaseC
       ...(options.interactive === undefined ? {} : { interactive: options.interactive }),
       ...(options.otp === undefined ? {} : { otp: options.otp }),
       ...(options.requestOtp === undefined ? {} : { requestOtp: options.requestOtp }),
+      ...(options.onExecutionEvent === undefined ? {} : { onEvent: options.onExecutionEvent }),
     })
   }
   return options.dryRun === true ? operation() : withSignalHandling(plan.repositoryRoot, operation)
@@ -248,6 +252,7 @@ export async function resumeReleaseFromCli(options: ReleaseCommandOptions) {
     if (stored === null) {
       throw new InvalidJournal(session.paths.journal, 'No journal exists for this repository')
     }
+    options.onResumePlan?.(stored.plan)
     const runner = createCommandRunner()
     const git = createGitReader(runner, {
       cwd: stored.plan.repositoryRoot,
@@ -268,6 +273,7 @@ export async function resumeReleaseFromCli(options: ReleaseCommandOptions) {
         ...(options.interactive === undefined ? {} : { interactive: options.interactive }),
         ...(options.otp === undefined ? {} : { otp: options.otp }),
         ...(options.requestOtp === undefined ? {} : { requestOtp: options.requestOtp }),
+        ...(options.onExecutionEvent === undefined ? {} : { onEvent: options.onExecutionEvent }),
       }),
     )
   } finally {

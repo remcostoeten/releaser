@@ -4,11 +4,12 @@ import type { ReleasePlan } from '../domain/release-plan.js'
 import {
   AbsolutePath,
   BranchName,
+  ChangeId,
   Digest,
   DistTagName,
-  Iso8601,
   PackageName,
   PlanId,
+  ReleasePlanCreatedAt,
   RepoRelativePath,
   SemVer,
   type SemanticType,
@@ -98,21 +99,21 @@ const fileMutationSchema = z.discriminatedUnion('kind', [
     path: semantic(RepoRelativePath),
     previousVersion: semantic(SemVer),
     nextVersion: semantic(SemVer),
-    edits: z.array(textEditSchema),
+    edits: z.array(textEditSchema).readonly(),
   }),
   z.strictObject({
     kind: z.literal('lockfile-version'),
     path: semantic(RepoRelativePath),
     previousVersion: semantic(SemVer),
     nextVersion: semantic(SemVer),
-    edits: z.array(textEditSchema),
+    edits: z.array(textEditSchema).readonly(),
   }),
   z.strictObject({
     kind: z.literal('configured-replacement'),
     path: semantic(RepoRelativePath),
     pattern: replacementPatternSchema,
     expectedMatches: z.number().int().positive(),
-    edits: z.array(textEditSchema),
+    edits: z.array(textEditSchema).readonly(),
   }),
 ])
 
@@ -137,7 +138,7 @@ const changeCategorySchema = z.enum([
 ])
 
 const changeSchema = z.strictObject({
-  id: z.string(),
+  id: semantic(ChangeId),
   title: z.string(),
   category: changeCategorySchema,
   author: z.string().nullable(),
@@ -202,7 +203,7 @@ export const releasePlanSchema = z
   .strictObject({
     schemaVersion: z.literal(1),
     id: semantic(PlanId),
-    createdAt: semantic(Iso8601),
+    createdAt: semantic(ReleasePlanCreatedAt),
     repositoryRoot: semantic(AbsolutePath),
     packageName: semantic(PackageName),
     fingerprint: repositoryFingerprintSchema,

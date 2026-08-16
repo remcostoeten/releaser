@@ -1,5 +1,8 @@
 import type { Command } from 'commander'
+import { renderPlanReport } from '../../ui/index.js'
+import { planReportView } from '../command-reports.js'
 import { planRelease, type ReleaseCommandOptions } from '../release-service.js'
+import { stdoutEnvironment } from './report-environment.js'
 
 export function registerPlanCommand(program: Command): void {
   program
@@ -8,6 +11,10 @@ export function registerPlanCommand(program: Command): void {
     .action(async (_options, command) => {
       const options = command.optsWithGlobals() as ReleaseCommandOptions & { json?: boolean }
       const result = await planRelease(options)
-      console.log(options.json === true ? JSON.stringify(result) : JSON.stringify(result, null, 2))
+      console.log(
+        options.json === true
+          ? JSON.stringify(result)
+          : renderPlanReport(planReportView(result), stdoutEnvironment()),
+      )
     })
 }

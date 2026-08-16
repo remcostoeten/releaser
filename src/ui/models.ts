@@ -62,3 +62,37 @@ export type SuccessSummaryView = {
   skipped?: readonly string[]
   journalPath?: string
 }
+
+export type NoteSectionView = {
+  title: string
+  changes: number
+}
+
+export type PlanReportView = {
+  summary: readonly KeyValueRow[] | null
+  checks: readonly CheckRowView[]
+  checkSummary: CheckSummaryView
+  files: readonly FileDiffView[]
+  actions: readonly ActionRowView[]
+  noteSections: readonly NoteSectionView[]
+  noteChanges: number
+}
+
+export type DoctorReportView = {
+  checks: readonly CheckRowView[]
+  summary: CheckSummaryView
+}
+
+export type StatusSectionView = {
+  title: string
+  rows: readonly KeyValueRow[]
+}
+
+export type StatusReportView = {
+  sections: readonly StatusSectionView[]
+}
+
+export type ScanReportView = {
+  version: string
+  occurrences: readonly OccurrenceView[]
+}

@@ -9,6 +9,12 @@ export type {
   KeyValueRow,
   OccurrenceView,
   OutputEnvironment,
+  NoteSectionView,
+  PlanReportView,
+  DoctorReportView,
+  StatusReportView,
+  StatusSectionView,
+  ScanReportView,
   SemanticState,
   SuccessSummaryView,
 } from './models.js'
@@ -23,5 +29,9 @@ export {
   renderKeyValueRows,
   renderOccurrences,
   renderSuccessSummary,
+  renderDoctorReport,
+  renderPlanReport,
+  renderScanReport,
+  renderStatusReport,
 } from './renderers.js'
 export { sanitizeTerminalText, styleText } from './style.js'

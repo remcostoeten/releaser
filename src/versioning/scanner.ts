@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { lstat, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { RepoRelativePath, type SemVer } from '../domain/semantic.js'
 import type { CommandRunner } from '../shared/command-runner.js'
@@ -46,6 +46,13 @@ function decodeText(content: Buffer): string | null {
     }
     throw error
   }
+}
+
+// Tracked symlinks may dangle or resolve to directories; their Git content
+// is the target path string, so they carry no version text worth scanning.
+async function readRegularFile(absolutePath: string): Promise<Buffer | null> {
+  const stats = await lstat(absolutePath)
+  return stats.isFile() ? readFile(absolutePath) : null
 }
 
 function occurrencesIn(
@@ -111,7 +118,8 @@ export function createVersionScanner(runner: CommandRunner, cwd: string): Versio
         await Promise.all(
           paths.map(async (untrustedPath) => {
             const path = RepoRelativePath.from(untrustedPath, 'a Git-tracked path')
-            const source = decodeText(await readFile(join(root, path)))
+            const content = await readRegularFile(join(root, path))
+            const source = content === null ? null : decodeText(content)
             return source === null ? [] : occurrencesIn(path, source, version)
           }),
         )

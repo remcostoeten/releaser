@@ -1,4 +1,4 @@
-import { writeFile } from 'node:fs/promises'
+import { mkdir, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createVersionScanner } from '../../src/versioning/scanner.js'
@@ -63,5 +63,31 @@ describe('version scanner exclusions', () => {
     )
 
     expect(occurrences).toEqual([{ file: 'kept.txt', line: 1, column: 1 }])
+  })
+
+  it('skips tracked symlinks, including dangling ones and links to directories', async () => {
+    repository = await createTempRepository()
+    await repository.write('kept.txt', '1.2.3\n')
+    await mkdir(join(repository.root, 'linked-directory'))
+    await repository.write('linked-directory/inside.txt', '1.2.3\n')
+    await symlink('linked-directory', join(repository.root, 'directory-link'))
+    await symlink('missing-target.txt', join(repository.root, 'dangling-link'))
+    await repository.git([
+      'add',
+      'kept.txt',
+      'linked-directory/inside.txt',
+      'directory-link',
+      'dangling-link',
+    ])
+    await repository.git(['commit', '--message', 'initial'])
+
+    const occurrences = await createVersionScanner(repository.runner, repository.root).scan(
+      version('1.2.3'),
+    )
+
+    expect(occurrences).toEqual([
+      { file: 'kept.txt', line: 1, column: 1 },
+      { file: 'linked-directory/inside.txt', line: 1, column: 1 },
+    ])
   })
 })

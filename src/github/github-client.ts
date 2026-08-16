@@ -289,11 +289,11 @@ export function createGitHubClient(token: string, options: GitHubClientOptions =
     },
     async readWorkflowRunsForRef(repository, ref): Promise<GitHubWorkflowRun[]> {
       try {
-        // For tag pushes GitHub reports the tag name as head_branch.
+        // The branch filter also matches tag refs on tag-push runs.
         const response = await read('GET /repos/{owner}/{repo}/actions/runs', {
           owner: repository.owner,
           repo: repository.repo,
-          head_branch: ref,
+          branch: ref,
           per_page: 100,
         })
         const runs = record(response.data).workflow_runs

@@ -36,6 +36,7 @@ releaser doctor   # run preflight checks
 releaser scan     # find version occurrences in tracked files
 releaser resume   # continue an interrupted release
 releaser ship     # commit a feature, merge to the release branch, and release
+releaser finalize # wait for the tag's CI, then publish the draft GitHub Release
 ```
 
 When work is still uncommitted on a feature branch, `ship` provides the
@@ -165,6 +166,12 @@ availability, authentication, registry, pack, or publish checks. Explicit,
 match-count-checked replacements can synchronize Cargo, Tauri, and nested
 package versions. See the [Skriuw](examples/skriuw.releaser.config.json) and
 [Dora](examples/dora.releaser.config.json) examples.
+
+When CI owns artifact builds and creates the draft GitHub Release itself,
+`releaser finalize` closes the last mile: it polls the workflow runs
+triggered by the release tag, refuses to publish while any run is pending or
+failed, and flips the draft to published once everything is green. It is
+idempotent and safe to re-run after a timeout.
 
 ## Scope
 

@@ -1,6 +1,7 @@
 import { Command } from 'commander'
 import { registerCompletionCommand } from './commands/completion.js'
 import { registerDoctorCommand } from './commands/doctor.js'
+import { registerFinalizeCommand } from './commands/finalize.js'
 import { registerPlanCommand } from './commands/plan.js'
 import { registerReleaseCommand } from './commands/release.js'
 import { registerResumeCommand } from './commands/resume.js'
@@ -38,6 +39,7 @@ export function createProgram(version: string): Command {
   registerScanCommand(program)
   registerResumeCommand(program)
   registerShipCommand(program)
+  registerFinalizeCommand(program)
   registerCompletionCommand(program)
 
   return program

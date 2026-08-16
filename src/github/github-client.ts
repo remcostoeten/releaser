@@ -7,6 +7,7 @@ import type {
   GitHubPullRequest,
   GitHubRepository,
   GitHubRepositoryRef,
+  GitHubWorkflowRun,
 } from './types.js'
 
 type GitHubResponse = {
@@ -34,7 +35,9 @@ export type GitHubClient = {
     repository: GitHubRepositoryRef,
     commitSha: string,
   ): Promise<GitHubPullRequest[]>
+  readWorkflowRunsForRef(repository: GitHubRepositoryRef, ref: string): Promise<GitHubWorkflowRun[]>
   createRelease(request: CreateGitHubReleaseRequest): Promise<GitHubRelease>
+  publishRelease(repository: GitHubRepositoryRef, releaseId: number): Promise<GitHubRelease>
 }
 
 type ApiFailure = Error & {
@@ -114,6 +117,17 @@ function normalizeRelease(value: unknown): GitHubRelease {
     url: stringValue(data.html_url),
     draft: booleanValue(data.draft),
     prerelease: booleanValue(data.prerelease),
+  }
+}
+
+function normalizeWorkflowRun(value: unknown): GitHubWorkflowRun {
+  const data = record(value)
+  const conclusion = stringValue(data.conclusion)
+  return {
+    id: numberValue(data.id),
+    name: stringValue(data.name),
+    status: stringValue(data.status),
+    conclusion: conclusion.length === 0 ? null : conclusion,
   }
 }
 
@@ -254,6 +268,21 @@ export function createGitHubClient(token: string, options: GitHubClientOptions =
         throw apiError(error)
       }
     },
+    async readWorkflowRunsForRef(repository, ref): Promise<GitHubWorkflowRun[]> {
+      try {
+        // For tag pushes GitHub reports the tag name as head_branch.
+        const response = await read('GET /repos/{owner}/{repo}/actions/runs', {
+          owner: repository.owner,
+          repo: repository.repo,
+          head_branch: ref,
+          per_page: 100,
+        })
+        const runs = record(response.data).workflow_runs
+        return Array.isArray(runs) ? runs.map(normalizeWorkflowRun) : []
+      } catch (error) {
+        throw apiError(error)
+      }
+    },
     async createRelease(request): Promise<GitHubRelease> {
       try {
         const response = await transport.request('POST /repos/{owner}/{repo}/releases', {
@@ -266,6 +295,22 @@ export function createGitHubClient(token: string, options: GitHubClientOptions =
           draft: request.draft,
           prerelease: request.prerelease,
         })
+        return normalizeRelease(response.data)
+      } catch (error) {
+        throw apiError(error)
+      }
+    },
+    async publishRelease(repository, releaseId): Promise<GitHubRelease> {
+      try {
+        const response = await transport.request(
+          'PATCH /repos/{owner}/{repo}/releases/{release_id}',
+          {
+            owner: repository.owner,
+            repo: repository.repo,
+            release_id: releaseId,
+            draft: false,
+          },
+        )
         return normalizeRelease(response.data)
       } catch (error) {
         throw apiError(error)

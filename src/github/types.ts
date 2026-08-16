@@ -20,6 +20,13 @@ export type GitHubRelease = {
   prerelease: boolean
 }
 
+export type GitHubWorkflowRun = {
+  id: number
+  name: string
+  status: string
+  conclusion: string | null
+}
+
 export type CreateGitHubReleaseRequest = {
   repository: GitHubRepositoryRef
   tag: string

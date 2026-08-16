@@ -256,6 +256,29 @@ export class GitHubApiError extends ReleaserError {
   }
 }
 
+export class WorkflowRunsFailed extends ReleaserError {
+  readonly kind = 'WorkflowRunsFailed'
+  readonly remediation =
+    'Fix the failed workflow runs and re-run them, then run releaser finalize again.'
+
+  constructor(tag: string, failed: readonly string[]) {
+    super(`Workflow runs for ${tag} failed: ${failed.join(', ')}`, { tag, failed })
+  }
+}
+
+export class FinalizeTimedOut extends ReleaserError {
+  readonly kind = 'FinalizeTimedOut'
+  readonly remediation =
+    'Wait for the workflow runs to finish, then run releaser finalize again; it is safe to re-run.'
+
+  constructor(tag: string, waitedMs: number) {
+    super(`Timed out after ${Math.round(waitedMs / 60_000)}m waiting for workflow runs on ${tag}`, {
+      tag,
+      waitedMs,
+    })
+  }
+}
+
 export class ReleaseExists extends ReleaserError {
   readonly kind = 'ReleaseExists'
   readonly remediation = 'The release already exists. Use --yes to skip or delete it first.'

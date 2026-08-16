@@ -75,7 +75,7 @@ export async function finalizeReleaseFromCli(
   const repository = { host: remote.host, owner: remote.owner, repo: remote.repo }
   return finalizeRelease(
     {
-      readReleaseByTag: (releaseTag) => client.readReleaseByTag(repository, releaseTag),
+      readReleaseByTag: (releaseTag) => client.findReleaseByTag(repository, releaseTag),
       readWorkflowRunsForRef: (ref) => client.readWorkflowRunsForRef(repository, ref),
       publishRelease: (releaseId) => client.publishRelease(repository, releaseId),
       sleep,

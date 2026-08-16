@@ -35,6 +35,7 @@ export type GitHubClient = {
     repository: GitHubRepositoryRef,
     commitSha: string,
   ): Promise<GitHubPullRequest[]>
+  findReleaseByTag(repository: GitHubRepositoryRef, tag: string): Promise<GitHubRelease | null>
   readWorkflowRunsForRef(repository: GitHubRepositoryRef, ref: string): Promise<GitHubWorkflowRun[]>
   createRelease(request: CreateGitHubReleaseRequest): Promise<GitHubRelease>
   publishRelease(repository: GitHubRepositoryRef, releaseId: number): Promise<GitHubRelease>
@@ -264,6 +265,24 @@ export function createGitHubClient(token: string, options: GitHubClientOptions =
           const normalized = normalizePullRequest(pullRequest)
           return normalized === null ? [] : [normalized]
         })
+      } catch (error) {
+        throw apiError(error)
+      }
+    },
+    // The by-tag endpoint only returns published releases; a draft is not
+    // associated with its tag until publication, so drafts require listing.
+    async findReleaseByTag(repository, tag): Promise<GitHubRelease | null> {
+      try {
+        const response = await read('GET /repos/{owner}/{repo}/releases', {
+          owner: repository.owner,
+          repo: repository.repo,
+          per_page: 100,
+        })
+        if (!Array.isArray(response.data)) {
+          return null
+        }
+        const match = response.data.map(normalizeRelease).find((release) => release.tag === tag)
+        return match ?? null
       } catch (error) {
         throw apiError(error)
       }

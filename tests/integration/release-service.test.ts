@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { scanRelease } from '../../src/cli/release-service.js'
+import { planRelease, scanRelease } from '../../src/cli/release-service.js'
 import { readHumanReleaseStatus } from '../../src/cli/status-service.js'
 import { createTempRepository, type TempRepository } from '../helpers/temp-repository.js'
 
@@ -10,6 +10,16 @@ afterEach(async () => {
 })
 
 describe('release service repository resolution', () => {
+  it('maps a missing --cwd path to a typed usage error', async () => {
+    await expect(
+      planRelease({ cwd: '/path/that/does/not/exist', bump: 'patch' }),
+    ).rejects.toMatchObject({
+      kind: 'UsageError',
+      message: 'Working directory does not exist: /path/that/does/not/exist',
+      remediation: 'Pass --cwd with an existing directory path.',
+    })
+  })
+
   it('uses repository-root configuration when --cwd points at a nested directory', async () => {
     const repository = await createTempRepository()
     repositories.push(repository)

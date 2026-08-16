@@ -170,6 +170,14 @@ describe('CLI parsing', () => {
     expect(result.stderr).toContain('Provide --bump')
     expect(result.stdout).toBe('')
   })
+  it('reports a missing --cwd as a usage error without a raw ENOENT', async () => {
+    const result = await runCli(['plan', '--bump', 'patch', '--cwd', '/path/that/does/not/exist'])
+
+    expect(result.exitCode).toBe(2)
+    expect(result.stderr).toContain('Working directory does not exist')
+    expect(result.stderr).toContain('Pass --cwd with an existing directory path.')
+    expect(result.stderr).not.toContain('ENOENT')
+  })
 
   it('keeps README examples aligned with accepted syntax', async () => {
     const readme = await readFile(README, 'utf8')

@@ -5,7 +5,7 @@ import { loadConfig } from '../config/load.js'
 import { GitHubAuthFailed, NotAGitRepository, UsageError } from '../domain/errors.js'
 import { createGitReader } from '../git/git-reader.js'
 import { createGitHubClient } from '../github/github-client.js'
-import { resolveGitHubToken } from '../github/token.js'
+import { resolveGitHubTokenWithGh } from '../github/token.js'
 import { createCommandRunner } from '../shared/command-runner.js'
 
 export type FinalizeCommandOptions = {
@@ -64,7 +64,7 @@ export async function finalizeReleaseFromCli(
   if (remote === null) {
     throw new UsageError(`Remote ${config.remote} is not a recognizable GitHub repository.`)
   }
-  const token = resolveGitHubToken()
+  const token = await resolveGitHubTokenWithGh(runner)
   if (token === null) {
     throw new GitHubAuthFailed('missing')
   }

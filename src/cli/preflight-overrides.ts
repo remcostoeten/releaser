@@ -29,13 +29,19 @@ function consequence(check: Extract<ReleaseCheck, { outcome: 'blocked' }>): stri
   return consequences[check.id] ?? 'This safety check will be explicitly overridden.'
 }
 
+function confirmationQuestion(check: Extract<ReleaseCheck, { outcome: 'blocked' }>): string {
+  return check.id === 'github-token-valid'
+    ? 'Continue without creating a GitHub Release?'
+    : 'Override this check?'
+}
+
 export function renderOverridePrompt(check: Extract<ReleaseCheck, { outcome: 'blocked' }>): string {
   return [
     check.title,
     check.message,
     `Consequence: ${consequence(check)}`,
     `Remediation: ${check.remediation}`,
-    'Override this check?',
+    confirmationQuestion(check),
   ].join('\n')
 }
 

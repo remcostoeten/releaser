@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 import { loadConfig } from '../config/load.js'
 import { createGitReader } from '../git/git-reader.js'
 import { createGitHubClient } from '../github/github-client.js'
-import { resolveGitHubToken } from '../github/token.js'
+import { resolveGitHubTokenWithGh } from '../github/token.js'
 import { createNpmClient } from '../npm/npm-client.js'
 import { createPackageReader } from '../npm/package.js'
 import { createCommandRunner } from '../shared/command-runner.js'
@@ -25,7 +25,7 @@ export async function readHumanReleaseStatus(options: {
   const tagName =
     manifest.kind === 'found' ? `${config.tagPrefix}${manifest.manifest.version}` : null
   const tag = await readHumanTagStatus(tagName, git)
-  const github = await readHumanGitHubStatus(config.github.release, tagName, git)
+  const github = await readHumanGitHubStatus(config.github.release, tagName, git, runner)
 
   return { repository, manifest, registry, tag, github }
 }
@@ -77,6 +77,7 @@ async function readHumanGitHubStatus(
   enabled: boolean,
   tagName: string | null,
   git: ReturnType<typeof createGitReader>,
+  runner: ReturnType<typeof createCommandRunner>,
 ): Promise<HumanStatusResult['github']> {
   if (!enabled) {
     return { kind: 'skipped', reason: 'GitHub Release creation is disabled' }
@@ -89,9 +90,12 @@ async function readHumanGitHubStatus(
     if (repository === null) {
       return { kind: 'unavailable', reason: 'remote is not a supported GitHub repository' }
     }
-    const token = resolveGitHubToken()
+    const token = await resolveGitHubTokenWithGh(runner)
     if (token === null) {
-      return { kind: 'unauthenticated', reason: 'GITHUB_TOKEN or GH_TOKEN is required' }
+      return {
+        kind: 'unauthenticated',
+        reason: 'Run `gh auth login`, or set GITHUB_TOKEN or GH_TOKEN',
+      }
     }
     const baseUrl =
       repository.host === 'github.com' ? undefined : `https://${repository.host}/api/v3`

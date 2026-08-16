@@ -2,7 +2,7 @@ import type { GitHubReader, GitHubRepositoryRef, GitHubTokenStatus } from '../ap
 import { GitHubAuthFailed } from '../domain/errors.js'
 import type { RemoteRepository } from '../git/remote-url.js'
 import { createGitHubClient, type GitHubClientOptions } from './github-client.js'
-import { resolveGitHubToken } from './token.js'
+import { resolveGitHubToken, type GitHubToken } from './token.js'
 
 export type RemoteRepositoryReader = {
   readRemoteRepository(): Promise<RemoteRepository | null>
@@ -10,6 +10,7 @@ export type RemoteRepositoryReader = {
 
 export type GitHubReaderOptions = GitHubClientOptions & {
   environment?: NodeJS.ProcessEnv
+  token?: GitHubToken | null
 }
 
 async function readPullRequestsInBatches(
@@ -46,7 +47,8 @@ export function createGitHubReader(
     if (authenticatedClient !== null) {
       return authenticatedClient
     }
-    const token = resolveGitHubToken(options.environment)
+    const token =
+      options.token === undefined ? resolveGitHubToken(options.environment) : options.token
     if (token === null) {
       return null
     }

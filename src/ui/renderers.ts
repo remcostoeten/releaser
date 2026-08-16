@@ -256,7 +256,7 @@ export function renderPlanReport(view: PlanReportView, environment: OutputEnviro
     )
   }
 
-  sections.push('Planning made no changes.')
+  sections.push('Plan created in read-only mode. No repository changes made.')
   return sections.join('\n\n')
 }
 

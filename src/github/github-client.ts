@@ -90,7 +90,10 @@ function retryDelay(error: unknown, attempt: number): number | null {
   return null
 }
 
-function apiError(error: unknown): GitHubApiError {
+function apiError(error: unknown): GitHubApiError | GitHubAuthFailed {
+  if (statusOf(error) === 401) {
+    return new GitHubAuthFailed('invalid')
+  }
   return new GitHubApiError(messageOf(error), statusOf(error) ?? 0)
 }
 

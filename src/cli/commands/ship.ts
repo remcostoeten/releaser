@@ -1,6 +1,6 @@
 import * as prompts from '@clack/prompts'
 import type { Command } from 'commander'
-import { isBlocked, unoverridableBlockers } from '../../domain/checks.js'
+import type { ReleaseCheck } from '../../domain/checks.js'
 import {
   Cancelled,
   CancelledAfterPreparation,
@@ -8,12 +8,14 @@ import {
   UsageError,
 } from '../../domain/errors.js'
 import type { ShipPlan } from '../../domain/ship-plan.js'
+import { renderCheckRows, type CheckRowView } from '../../ui/index.js'
 import {
   executePlannedRelease,
   planRelease,
   type ReleaseCommandOptions,
 } from '../release-service.js'
 import { inspectShip, planShip, prepareShip, type ShipCommandOptions } from '../ship-service.js'
+import { authorizePreflight } from '../preflight-overrides.js'
 
 type CliOptions = ShipCommandOptions & { json?: boolean }
 
@@ -72,25 +74,61 @@ async function confirm(message: string): Promise<void> {
   }
 }
 
-function assertReleaseCanExecute(
+function assertReleasePlanned(
   result: Awaited<ReturnType<typeof planRelease>>,
-  allowOverrides: boolean,
 ): asserts result is Extract<Awaited<ReturnType<typeof planRelease>>, { kind: 'planned' }> {
-  if (
-    result.kind !== 'planned' ||
-    unoverridableBlockers(result.checks).length > 0 ||
-    (isBlocked(result.checks) && !allowOverrides)
-  ) {
+  if (result.kind !== 'planned') {
     throw new PreflightFailed(result.checks)
   }
 }
 
-function assertShipReleaseReady(
-  result: Awaited<ReturnType<typeof planRelease>>,
-): asserts result is Extract<Awaited<ReturnType<typeof planRelease>>, { kind: 'planned' }> {
-  if (result.kind !== 'planned' || unoverridableBlockers(result.checks).length > 0) {
-    throw new PreflightFailed(result.checks)
+function checkView(check: ReleaseCheck): CheckRowView {
+  if (check.outcome === 'passed' || check.outcome === 'informed') {
+    return {
+      status: 'passed',
+      title: check.title,
+      ...(check.outcome === 'informed' ? { message: check.message } : {}),
+    }
   }
+  if (check.outcome === 'skipped') {
+    return { status: 'skipped', title: check.title, message: check.reason }
+  }
+  return {
+    status: check.outcome === 'warned' ? 'warned' : 'blocked',
+    title: check.title,
+    message: check.message,
+    remediation: check.remediation,
+  }
+}
+
+function renderChecks(checks: readonly ReleaseCheck[]): void {
+  console.log(
+    renderCheckRows(checks.map(checkView), {
+      colorEnabled: process.stdout.isTTY === true && process.env.NO_COLOR === undefined,
+    }),
+  )
+}
+
+async function confirmOverride(message: string): Promise<boolean> {
+  const answer = await prompts.confirm({ message })
+  return !prompts.isCancel(answer) && answer
+}
+
+async function authorizeRelease(
+  result: Awaited<ReturnType<typeof planRelease>>,
+  options: CliOptions,
+  interactive: boolean,
+) {
+  if (options.json !== true) {
+    renderChecks(result.checks)
+  }
+  const acceptedOverrideCheckIds = await authorizePreflight(result.checks, {
+    yes: options.yes === true,
+    canPrompt: interactive,
+    ...(interactive ? { confirmOverride } : {}),
+  })
+  assertReleasePlanned(result)
+  return { result, acceptedOverrideCheckIds }
 }
 
 function renderPreparation(
@@ -123,14 +161,14 @@ async function executePreparedRelease(
     interactive,
   }
   const releasePlan = await planRelease(releaseOptions)
-  assertReleaseCanExecute(releasePlan, options.yes === true || interactive)
+  const authorized = await authorizeRelease(releasePlan, options, interactive)
   if (options.json !== true) {
     console.log(JSON.stringify(releasePlan, null, 2))
   }
   if (interactive) {
     try {
       await confirm(
-        `Release ${releasePlan.plan.version.nextVersion} from ${shipPlan.targetBranch}?`,
+        `Release ${authorized.result.plan.version.nextVersion} from ${shipPlan.targetBranch}?`,
       )
     } catch (error) {
       if (error instanceof Cancelled) {
@@ -139,7 +177,10 @@ async function executePreparedRelease(
       throw error
     }
   }
-  const release = await executePlannedRelease(releasePlan.plan, releaseOptions)
+  const release = await executePlannedRelease(authorized.result.plan, {
+    ...releaseOptions,
+    acceptedOverrideCheckIds: authorized.acceptedOverrideCheckIds,
+  })
   return { kind: 'shipped', preparation, release } as const
 }
 
@@ -151,13 +192,13 @@ export async function runShipWizard(initialOptions: CliOptions): Promise<void> {
   const options = interactive ? await completeShipOptions(initialOptions) : initialOptions
   const shipPlan = await planShip(options)
   const readiness = await planRelease({ ...options, cwd: shipPlan.repositoryRoot })
-  assertShipReleaseReady(readiness)
+  const authorized = await authorizeRelease(readiness, options, interactive)
   if (options.dryRun === true) {
-    renderPreparation(options, shipPlan, readiness, true)
+    renderPreparation(options, shipPlan, authorized.result, true)
     return
   }
   if (options.json !== true) {
-    renderPreparation(options, shipPlan, readiness, false)
+    renderPreparation(options, shipPlan, authorized.result, false)
   }
   if (interactive) {
     await confirm(

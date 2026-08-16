@@ -1,12 +1,14 @@
 import * as prompts from '@clack/prompts'
 import type { Command } from 'commander'
-import { isBlocked, unoverridableBlockers } from '../../domain/checks.js'
 import { Cancelled, PreflightFailed } from '../../domain/errors.js'
+import type { ReleaseCheck } from '../../domain/checks.js'
+import { renderCheckRows, type CheckRowView } from '../../ui/index.js'
 import {
   executePlannedRelease,
   planRelease,
   type ReleaseCommandOptions,
 } from '../release-service.js'
+import { authorizePreflight } from '../preflight-overrides.js'
 import { inspectShip } from '../ship-service.js'
 import { runShipWizard } from './ship.js'
 
@@ -41,13 +43,15 @@ async function runWizard(options: CliOptions): Promise<void> {
     options.interactive !== false
   const selected = canPrompt ? await promptForSelection(options) : options
   const planned = await planRelease(selected)
-  if (planned.kind !== 'planned') {
-    throw new PreflightFailed(planned.checks)
+  if (selected.json !== true) {
+    console.log(renderCheckRows(planned.checks.map(checkView), outputEnvironment()))
   }
-  if (
-    unoverridableBlockers(planned.checks).length > 0 ||
-    (isBlocked(planned.checks) && selected.yes !== true && !canPrompt)
-  ) {
+  const acceptedOverrideCheckIds = await authorizePreflight(planned.checks, {
+    yes: selected.yes === true,
+    canPrompt,
+    ...(canPrompt ? { confirmOverride } : {}),
+  })
+  if (planned.kind !== 'planned') {
     throw new PreflightFailed(planned.checks)
   }
   if (selected.json !== true) {
@@ -61,6 +65,7 @@ async function runWizard(options: CliOptions): Promise<void> {
   }
   const result = await executePlannedRelease(planned.plan, {
     ...selected,
+    acceptedOverrideCheckIds,
     yes: selected.yes === true || canPrompt,
     interactive: canPrompt,
     requestOtp: async () => {
@@ -72,6 +77,34 @@ async function runWizard(options: CliOptions): Promise<void> {
     },
   })
   console.log(selected.json === true ? JSON.stringify(result) : JSON.stringify(result, null, 2))
+}
+
+function checkView(check: ReleaseCheck): CheckRowView {
+  if (check.outcome === 'passed' || check.outcome === 'informed') {
+    return {
+      status: 'passed',
+      title: check.title,
+      ...(check.outcome === 'informed' ? { message: check.message } : {}),
+    }
+  }
+  if (check.outcome === 'skipped') {
+    return { status: 'skipped', title: check.title, message: check.reason }
+  }
+  return {
+    status: check.outcome === 'warned' ? 'warned' : 'blocked',
+    title: check.title,
+    message: check.message,
+    remediation: check.remediation,
+  }
+}
+
+function outputEnvironment(): { colorEnabled: boolean } {
+  return { colorEnabled: process.stdout.isTTY === true && process.env.NO_COLOR === undefined }
+}
+
+async function confirmOverride(message: string): Promise<boolean> {
+  const answer = await prompts.confirm({ message })
+  return !prompts.isCancel(answer) && answer
 }
 
 export function registerReleaseCommand(program: Command): void {

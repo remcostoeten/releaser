@@ -48,4 +48,17 @@ describe('non-interactive planning', () => {
     expect(result.stderr).toContain('Provide --bump')
     expect(result.stdout).toBe('')
   })
+
+  it('reports a missing --cwd as a usage error without a raw ENOENT', async () => {
+    const result = await execa(
+      'npx',
+      ['tsx', CLI_ENTRY, 'plan', '--bump', 'patch', '--cwd', '/path/that/does/not/exist'],
+      { reject: false },
+    )
+
+    expect(result.exitCode).toBe(2)
+    expect(result.stderr).toContain('Working directory does not exist')
+    expect(result.stderr).toContain('Pass --cwd with an existing directory path.')
+    expect(result.stderr).not.toContain('ENOENT')
+  })
 })

@@ -1,7 +1,12 @@
 import { constants } from 'node:fs'
 import { chmod, open, readFile, rename, rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { PublishedPackageMismatch, StalePlan, VersionAlreadyPublished } from '../domain/errors.js'
+import {
+  GitHubAuthFailed,
+  PublishedPackageMismatch,
+  StalePlan,
+  VersionAlreadyPublished,
+} from '../domain/errors.js'
 import { applyEdits, editsApplyTo, type TextEdit } from '../domain/mutations.js'
 import type { ReleasePlan } from '../domain/release-plan.js'
 import type { RepoRelativePath, Sha } from '../domain/semantic.js'
@@ -284,7 +289,7 @@ function createGitHubStage(client: GitHubClient | null): ExecutionStage {
         return { kind: 'complete', details: { reason: plan.githubRelease.reason } }
       }
       if (client === null) {
-        throw new Error('GitHub client is required by this release plan')
+        throw new GitHubAuthFailed('missing')
       }
       const release = await client.readReleaseByTag(
         { host: 'github.com', owner: plan.githubRelease.owner, repo: plan.githubRelease.repo },
@@ -295,8 +300,11 @@ function createGitHubStage(client: GitHubClient | null): ExecutionStage {
         : { kind: 'complete', details: { url: release.url } }
     },
     async write(plan, context) {
-      if (plan.githubRelease.kind !== 'create' || client === null) {
+      if (plan.githubRelease.kind !== 'create') {
         throw new Error('GitHub release stage is not configured')
+      }
+      if (client === null) {
+        throw new GitHubAuthFailed('missing')
       }
       const result = await createGitHubRelease(client, {
         repository: {

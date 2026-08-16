@@ -8,6 +8,10 @@ import type {
   KeyValueRow,
   OccurrenceView,
   OutputEnvironment,
+  PlanReportView,
+  DoctorReportView,
+  StatusReportView,
+  ScanReportView,
   SemanticState,
   SuccessSummaryView,
 } from './models.js'
@@ -182,6 +186,88 @@ export function renderSuccessSummary(
     lines.push('', styleText(sanitizeTerminalText(view.journalPath), 'muted', environment))
   }
   return lines.join('\n')
+}
+
+export function renderPlanReport(view: PlanReportView, environment: OutputEnvironment): string {
+  const sections = [renderHeading('Release plan', environment)]
+
+  if (view.summary !== null) {
+    sections.push(renderKeyValueRows(view.summary, environment))
+  }
+
+  sections.push(
+    [
+      renderHeading('Preflight', environment),
+      renderCheckRows(view.checks, environment),
+      renderCheckSummary(view.checkSummary, environment),
+    ].join('\n'),
+  )
+
+  if (view.summary === null) {
+    sections.push('No release plan could be built.')
+  } else {
+    sections.push(
+      [renderHeading('Changed files', environment), renderFileDiffs(view.files, environment)].join(
+        '\n',
+      ),
+      [
+        renderHeading('Release actions', environment),
+        renderActionRows(view.actions, environment),
+      ].join('\n'),
+      [renderHeading('Release notes', environment), renderNoteSummary(view)].join('\n'),
+    )
+  }
+
+  sections.push('Planning made no changes.')
+  return sections.join('\n\n')
+}
+
+export function renderDoctorReport(view: DoctorReportView, environment: OutputEnvironment): string {
+  return [
+    renderHeading('Preflight doctor', environment),
+    renderCheckRows(view.checks, environment),
+    renderCheckSummary(view.summary, environment),
+  ].join('\n')
+}
+
+export function renderStatusReport(view: StatusReportView, environment: OutputEnvironment): string {
+  return view.sections
+    .map((section) =>
+      [
+        renderHeading(section.title, environment),
+        renderKeyValueRows(section.rows, environment),
+      ].join('\n'),
+    )
+    .join('\n\n')
+}
+
+export function renderScanReport(view: ScanReportView, environment: OutputEnvironment): string {
+  const count = view.occurrences.length
+  return [
+    renderHeading('Version occurrences', environment),
+    renderKeyValueRows(
+      [
+        { label: 'Current version', value: view.version },
+        { label: 'Occurrences', value: String(count), state: count === 0 ? 'warning' : 'success' },
+      ],
+      environment,
+    ),
+    renderOccurrences(view.occurrences, environment),
+  ].join('\n\n')
+}
+
+function renderNoteSummary(view: PlanReportView): string {
+  if (view.noteSections.length === 0) {
+    return 'No release-note changes.'
+  }
+
+  return [
+    `${view.noteChanges} release-note ${view.noteChanges === 1 ? 'change' : 'changes'}`,
+    ...view.noteSections.map(
+      (section) =>
+        `${section.title}: ${section.changes} ${section.changes === 1 ? 'change' : 'changes'}`,
+    ),
+  ].join('\n')
 }
 
 function pluralize(count: number, singular: string): string {

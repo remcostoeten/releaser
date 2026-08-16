@@ -1,0 +1,31 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`UI rendering foundation > renders blocked checks 1`] = `
+"BLOCK  Repository state
+       State details
+       Fix: Resolve state"
+`;
+
+exports[`UI rendering foundation > renders overridden checks 1`] = `
+"OVERRIDE  Repository state
+       State details
+       Fix: Resolve state"
+`;
+
+exports[`UI rendering foundation > renders passed checks 1`] = `
+"PASS  Repository state
+       State details
+       Fix: Resolve state"
+`;
+
+exports[`UI rendering foundation > renders skipped checks 1`] = `
+"SKIP  Repository state
+       State details
+       Fix: Resolve state"
+`;
+
+exports[`UI rendering foundation > renders warned checks 1`] = `
+"WARN  Repository state
+       State details
+       Fix: Resolve state"
+`;

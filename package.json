@@ -1,6 +1,6 @@
 {
   "name": "@remcostoeten/releaser",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Safe, resumable npm and GitHub release CLI",
   "license": "MIT",
   "bin": {

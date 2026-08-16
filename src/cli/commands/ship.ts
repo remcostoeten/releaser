@@ -16,14 +16,16 @@ import {
 } from '../release-service.js'
 import { inspectShip, planShip, prepareShip, type ShipCommandOptions } from '../ship-service.js'
 import { authorizePreflight } from '../preflight-overrides.js'
+import { createCliOutputContext, type CliOutputOptions } from '../output-context.js'
 
-type CliOptions = ShipCommandOptions & { json?: boolean }
+type CliOptions = ShipCommandOptions & CliOutputOptions
 
 function canPrompt(options: CliOptions): boolean {
+  const output = createCliOutputContext(options)
   return (
     process.stdin.isTTY === true &&
     options.yes !== true &&
-    options.json !== true &&
+    !output.json &&
     options.interactive !== false
   )
 }
@@ -101,12 +103,9 @@ function checkView(check: ReleaseCheck): CheckRowView {
   }
 }
 
-function renderChecks(checks: readonly ReleaseCheck[]): void {
-  console.log(
-    renderCheckRows(checks.map(checkView), {
-      colorEnabled: process.stdout.isTTY === true && process.env.NO_COLOR === undefined,
-    }),
-  )
+function renderChecks(checks: readonly ReleaseCheck[], options: CliOutputOptions): void {
+  const output = createCliOutputContext(options)
+  console.log(renderCheckRows(checks.map(checkView), output.stdout))
 }
 
 async function confirmOverride(message: string): Promise<boolean> {
@@ -119,8 +118,9 @@ async function authorizeRelease(
   options: CliOptions,
   interactive: boolean,
 ) {
-  if (options.json !== true) {
-    renderChecks(result.checks)
+  const output = createCliOutputContext(options)
+  if (!output.json) {
+    renderChecks(result.checks, options)
   }
   const acceptedOverrideCheckIds = await authorizePreflight(result.checks, {
     yes: options.yes === true,
@@ -137,6 +137,7 @@ function renderPreparation(
   readiness: Extract<Awaited<ReturnType<typeof planRelease>>, { kind: 'planned' }>,
   dryRun: boolean,
 ): void {
+  const output = createCliOutputContext(options)
   const value = {
     kind: dryRun ? 'ship-dry-run' : 'ship-preparation',
     preparation: plan,
@@ -146,7 +147,7 @@ function renderPreparation(
       ? { releasePlan: 'recomputed after the local merge, before release mutations' }
       : {}),
   }
-  console.log(JSON.stringify(value, null, options.json ? 0 : 2))
+  console.log(JSON.stringify(value, null, output.json ? 0 : 2))
 }
 
 async function executePreparedRelease(
@@ -162,7 +163,7 @@ async function executePreparedRelease(
   }
   const releasePlan = await planRelease(releaseOptions)
   const authorized = await authorizeRelease(releasePlan, options, interactive)
-  if (options.json !== true) {
+  if (!createCliOutputContext(options).json) {
     console.log(JSON.stringify(releasePlan, null, 2))
   }
   if (interactive) {
@@ -190,6 +191,7 @@ export async function runShipWizard(initialOptions: CliOptions): Promise<void> {
     throw new UsageError('Non-interactive ship requires --yes because it commits and merges code.')
   }
   const options = interactive ? await completeShipOptions(initialOptions) : initialOptions
+  const output = createCliOutputContext(options)
   const shipPlan = await planShip(options)
   const readiness = await planRelease({ ...options, cwd: shipPlan.repositoryRoot })
   const authorized = await authorizeRelease(readiness, options, interactive)
@@ -197,7 +199,7 @@ export async function runShipWizard(initialOptions: CliOptions): Promise<void> {
     renderPreparation(options, shipPlan, authorized.result, true)
     return
   }
-  if (options.json !== true) {
+  if (!output.json) {
     renderPreparation(options, shipPlan, authorized.result, false)
   }
   if (interactive) {
@@ -206,7 +208,7 @@ export async function runShipWizard(initialOptions: CliOptions): Promise<void> {
     )
   }
   const result = await executePreparedRelease(options, shipPlan, interactive)
-  console.log(options.json === true ? JSON.stringify(result) : JSON.stringify(result, null, 2))
+  console.log(output.json ? JSON.stringify(result) : JSON.stringify(result, null, 2))
 }
 
 export function registerShipCommand(program: Command): void {
@@ -216,15 +218,6 @@ export function registerShipCommand(program: Command): void {
     .option('--target <branch>', 'release branch; detected from configuration by default')
     .option('-m, --message <message>', 'commit message for uncommitted feature changes')
     .option('--merge-message <message>', 'merge commit message')
-    .option('--bump <kind>', 'patch, minor, major, or prerelease')
-    .option('--version <semver>', 'explicit target version')
-    .option('--tag <dist-tag>', 'npm dist-tag to publish under')
-    .option('--dry-run', 'show the preparation plan without writing')
-    .option('--yes', 'confirm preparation and release without prompting')
-    .option('--no-interactive', 'never prompt')
-    .option('--json', 'machine-readable output on stdout')
-    .option('--otp <code>', 'npm one-time password')
-    .option('--cwd <path>', 'run against another directory')
     .addHelpText(
       'after',
       '\nExamples:\n  releaser ship --bump patch\n  releaser ship --target master -m "feat: checkout" --bump minor --yes\n  releaser ship --dry-run -m "fix: totals" --bump patch',

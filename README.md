@@ -26,6 +26,34 @@ laptop sleeps between step 5 and step 6. Every step is journalled before it is
 attempted and checks whether it already happened before it runs, so
 `releaser resume` finishes the job instead of duplicating it.
 
+## Install
+
+Requires Node.js 24 or newer.
+
+```bash
+npm install --global @remcostoeten/releaser
+releaser --help
+```
+
+Run without a global install:
+
+```bash
+npx @remcostoeten/releaser doctor
+```
+
+Before the first release, configure a Git remote and upstream branch. When npm
+publication is enabled, authenticate with `npm login` or a suitable npm token.
+When GitHub Releases are enabled, provide GitHub authentication with
+`GITHUB_TOKEN`.
+
+Start read-only. Diagnose the repository, then preview a patch release:
+
+```bash
+releaser doctor
+releaser plan --bump patch
+releaser --bump patch --dry-run
+```
+
 ## Use
 
 ```bash
@@ -59,7 +87,9 @@ For non-interactive use, approval and a feature commit message are explicit:
 releaser ship --target master --message "feat: checkout" --bump minor --yes
 ```
 
-Enable shell completion with one of:
+## Shell completion
+
+Enable completion for the current shell:
 
 ```bash
 source <(releaser completion bash)
@@ -75,8 +105,38 @@ releaser --version 2.0.0 --dry-run
 releaser --bump prerelease --tag beta --no-interactive
 ```
 
-Under `--json`, stdout is valid JSON and nothing else — progress goes to
-stderr, so piping to `jq` works at every stage of a live release.
+Human output is concise terminal text. Under `--json`, stdout contains one
+valid JSON value and nothing else. Progress and diagnostics use stderr, so
+piping to `jq` remains safe:
+
+```bash
+releaser status --json | jq .
+```
+
+`--yes` approves prompts and explicitly overridable preflight checks. It never
+bypasses non-overridable blockers. `--otp` is sensitive; prefer npm
+authentication that does not require putting an OTP in shell history, and pass
+it only when npm requires one.
+
+## Exit codes and recovery
+
+| Code | Meaning |
+|---:|---|
+| 0 | Success |
+| 1 | Unexpected internal error |
+| 2 | Invalid arguments or flags |
+| 3 | Preflight failed |
+| 4 | Cancelled before release execution |
+| 5 | Partial release; resume required |
+| 6 | Authentication failure |
+
+After an interruption or partial release, fix the reported cause and continue
+the journalled plan:
+
+```bash
+releaser resume
+releaser resume --cwd /path/to/repository
+```
 
 ## What it refuses to do
 

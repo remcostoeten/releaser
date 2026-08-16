@@ -5,6 +5,7 @@ import { defaultRedactor } from '../shared/redaction.js'
 import { createProgram } from './create-program.js'
 import { renderReleaserError, renderUnknownError } from './error-output.js'
 import { EXIT_CODES } from './exit-codes.js'
+import { createCliOutputContext } from './output-context.js'
 
 const require = createRequire(import.meta.url)
 const manifest = require('../../package.json') as { version: string }
@@ -15,8 +16,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  const verbose = process.argv.includes('--verbose')
-  const colorEnabled = process.stderr.isTTY === true && process.env.NO_COLOR === undefined
+  const output = createCliOutputContext({
+    json: process.argv.includes('--json'),
+    verbose: process.argv.includes('--verbose'),
+  })
   for (const name of ['GITHUB_TOKEN', 'GH_TOKEN', 'NPM_TOKEN', 'NODE_AUTH_TOKEN'] as const) {
     const secret = process.env[name]
     if (secret !== undefined) {
@@ -24,8 +27,8 @@ main().catch((error: unknown) => {
     }
   }
   if (isReleaserError(error)) {
-    console.error(renderReleaserError(error, colorEnabled))
-    if (verbose && error.stack !== undefined) {
+    console.error(renderReleaserError(error, output.stderr.colorEnabled))
+    if (output.verbose && error.stack !== undefined) {
       console.error(defaultRedactor.redactText(error.stack))
     }
     const code =
@@ -43,6 +46,6 @@ main().catch((error: unknown) => {
     process.exit(code)
   }
 
-  console.error(renderUnknownError(error, verbose))
+  console.error(renderUnknownError(error, output.verbose))
   process.exit(EXIT_CODES.internalError)
 })

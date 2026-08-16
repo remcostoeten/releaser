@@ -10,7 +10,16 @@ import { defaultConfig } from '../../src/config/schema.js'
 import { VersionNotIncreasing } from '../../src/domain/errors.js'
 import { serializeReleasePlan } from '../../src/domain/release-plan.js'
 import { parseReleasePlan } from '../../src/journal/release-plan-schema.js'
-import { branch, digest, repoPath, sha, tag, version } from '../helpers/semantic.js'
+import {
+  branch,
+  changeId,
+  digest,
+  packageName,
+  repoPath,
+  sha,
+  tag,
+  version,
+} from '../helpers/semantic.js'
 import {
   cleanRepositoryState,
   createRecordingPorts,
@@ -82,6 +91,36 @@ describe('createReleasePlan', () => {
     expect(result.plan.boundary).toEqual({ kind: 'initial', headSha: 'a'.repeat(40) })
   })
 
+  it('renders collected notes into the GitHub Release body', async () => {
+    const { result } = await plan({
+      notes: {
+        version: version('1.2.4'),
+        previousVersion: version('1.2.3'),
+        sections: [
+          {
+            category: 'features',
+            changes: [
+              {
+                id: changeId('pr-8'),
+                title: 'Add safe release notes',
+                category: 'features',
+                author: 'octocat',
+                origin: { kind: 'pull-request', number: 8, mergeCommitSha: null },
+              },
+            ],
+          },
+        ],
+      },
+    })
+    if (result.kind !== 'planned' || result.plan.githubRelease.kind !== 'create') {
+      throw new Error('expected a GitHub release plan')
+    }
+
+    expect(result.plan.githubRelease.body).toBe(
+      '## Features\n\n- Add safe release notes (#8) by @octocat',
+    )
+  })
+
   it('produces a plan that validates against the wire schema', async () => {
     const { result } = await plan()
     if (result.kind !== 'planned') throw new Error('expected a plan')
@@ -112,6 +151,47 @@ describe('createReleasePlan', () => {
     expect(result.checks.find((check) => check.id === 'version-not-published')?.outcome).toBe(
       'passed',
     )
+  })
+
+  it('supports a private repository release without consulting npm', async () => {
+    const config = {
+      ...defaultConfig,
+      npm: { ...defaultConfig.npm, publish: false },
+      github: { ...defaultConfig.github, release: false },
+    }
+    const { result, recorder } = await plan(
+      {
+        manifest: {
+          kind: 'found',
+          manifest: {
+            name: packageName('desktop-app'),
+            version: version('1.2.3'),
+            private: true,
+          },
+        },
+      },
+      { ...patchRequest, config },
+    )
+
+    expect(result.kind).toBe('planned')
+    if (result.kind !== 'planned') return
+    expect(result.plan.npmPublish).toEqual({
+      kind: 'skipped',
+      reason: 'npm.publish is disabled in configuration',
+    })
+    expect(result.checks.find((check) => check.id === 'npm-available')?.outcome).toBe('skipped')
+    expect(result.checks.find((check) => check.id === 'package-not-private')?.outcome).toBe(
+      'skipped',
+    )
+    expect(result.checks.find((check) => check.id === 'npm-authenticated')?.outcome).toBe('skipped')
+    expect(result.checks.find((check) => check.id === 'version-not-published')?.outcome).toBe(
+      'skipped',
+    )
+    expect(recorder.calls).not.toContain('toolchain.readNpmVersion')
+    expect(recorder.calls).not.toContain('registry.readPublishedVersions')
+    expect(recorder.calls).not.toContain('registry.readAuthentication')
+    expect(recorder.calls).not.toContain('github.resolveRepository')
+    expect(recorder.calls).not.toContain('github.readTokenStatus')
   })
 
   it('returns a blocking check for a dirty tree rather than throwing', async () => {
@@ -151,6 +231,7 @@ describe('createReleasePlan', () => {
       mutations: {
         kind: 'replacement-mismatch',
         file: repoPath('README.md'),
+        pattern: { kind: 'literal', value: 'v1.2.3' },
         expectedMatches: 1,
         actualMatches: 0,
       },

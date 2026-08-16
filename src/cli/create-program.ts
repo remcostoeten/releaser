@@ -1,9 +1,11 @@
 import { Command } from 'commander'
+import { registerCompletionCommand } from './commands/completion.js'
 import { registerDoctorCommand } from './commands/doctor.js'
 import { registerPlanCommand } from './commands/plan.js'
 import { registerReleaseCommand } from './commands/release.js'
 import { registerResumeCommand } from './commands/resume.js'
 import { registerScanCommand } from './commands/scan.js'
+import { registerShipCommand } from './commands/ship.js'
 import { registerStatusCommand } from './commands/status.js'
 
 export function createProgram(version: string): Command {
@@ -23,6 +25,11 @@ export function createProgram(version: string): Command {
     .option('--otp <code>', 'npm one-time password')
     .option('--cwd <path>', 'run against another directory')
     .option('--verbose', 'verbose logging')
+    .showSuggestionAfterError(true)
+    .addHelpText(
+      'after',
+      '\nCommon flows:\n  releaser ship --bump patch       Commit, merge, and release interactively\n  releaser --bump patch            Release the current branch\n  eval "$(releaser completion zsh)" Enable zsh completion',
+    )
 
   registerReleaseCommand(program)
   registerPlanCommand(program)
@@ -30,6 +37,8 @@ export function createProgram(version: string): Command {
   registerDoctorCommand(program)
   registerScanCommand(program)
   registerResumeCommand(program)
+  registerShipCommand(program)
+  registerCompletionCommand(program)
 
   return program
 }

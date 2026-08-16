@@ -16,7 +16,19 @@ main().catch((error: unknown) => {
   if (isReleaserError(error)) {
     console.error(`${error.kind}: ${error.message}`)
     console.error(error.remediation)
-    process.exit(EXIT_CODES.internalError)
+    const code =
+      error.kind === 'UsageError'
+        ? EXIT_CODES.usageError
+        : error.kind === 'PreflightFailed'
+          ? EXIT_CODES.preflightFailed
+          : error.kind === 'Cancelled' || error.kind === 'CancelledAfterPreparation'
+            ? EXIT_CODES.cancelled
+            : error.kind === 'PartialRelease'
+              ? EXIT_CODES.partialRelease
+              : error.kind.endsWith('AuthFailed') || error.kind === 'OtpRequired'
+                ? EXIT_CODES.authenticationFailure
+                : EXIT_CODES.internalError
+    process.exit(code)
   }
 
   console.error(error instanceof Error ? error.message : String(error))

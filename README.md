@@ -14,10 +14,6 @@
   <img src="https://img.shields.io/badge/node-%E2%89%A524-blue" alt="Node 24+" />
 </p>
 
-> **Status: specification and tooling only.** `SPEC.md` is written and the
-> repository is configured; no source code exists yet. Nothing here is
-> installable today.
-
 Most release tools do the work and tell you afterwards. This one builds an
 immutable **ReleasePlan** first — the exact version, every file it will touch,
 every commit, tag, push, publish, and release it will perform — shows it to
@@ -39,6 +35,35 @@ releaser status   # repo, registry, and release state
 releaser doctor   # run preflight checks
 releaser scan     # find version occurrences in tracked files
 releaser resume   # continue an interrupted release
+releaser ship     # commit a feature, merge to the release branch, and release
+```
+
+When work is still uncommitted on a feature branch, `ship` provides the
+one-push workflow:
+
+```bash
+releaser ship --bump patch
+```
+
+It shows the feature commit and merge preparation before changing Git, asks
+for the commit message when needed, merges into the configured release branch,
+then shows the ordinary immutable release plan. The executor's branch push
+contains both the merge and release commit, so a deployment triggered by a
+push to `master` or `main` runs once. Merge conflicts are aborted locally and
+the command returns to the feature branch without pushing or publishing.
+
+For non-interactive use, approval and a feature commit message are explicit:
+
+```bash
+releaser ship --target master --message "feat: checkout" --bump minor --yes
+```
+
+Enable shell completion with one of:
+
+```bash
+source <(releaser completion bash)
+eval "$(releaser completion zsh)"
+releaser completion fish | source
 ```
 
 Non-interactive, for CI:
@@ -114,6 +139,7 @@ key must never silently disable a safety check.
 {
   "releaseBranch": null,
   "remote": "origin",
+  "versionFile": "package.json",
   "tagPrefix": "v",
   "commitMessage": "chore(release): {{version}}",
   "npm": { "publish": true, "access": "public", "tag": null },
@@ -132,11 +158,21 @@ key must never silently disable a safety check.
 `releaseBranch: null` detects the remote's default branch, so `master` and
 `main` repositories both work without configuration.
 
+`versionFile` selects the JSON file containing the repository release version.
+It defaults to `package.json`. Set `npm.publish` to `false` to release a private
+desktop application or another repository-level product without running npm
+availability, authentication, registry, pack, or publish checks. Explicit,
+match-count-checked replacements can synchronize Cargo, Tauri, and nested
+package versions. See the [Skriuw](examples/skriuw.releaser.config.json) and
+[Dora](examples/dora.releaser.config.json) examples.
+
 ## Scope
 
-One publishable package, npm, GitHub. No monorepos or workspaces, no other
-registries, no other forges, no plugin system. The full list of things this
-deliberately does not do is `SPEC.md` §2.
+One version and tag per run, optionally published to npm and GitHub. Repository
+workspaces are permitted for non-npm releases, but independently versioned or
+multi-package publication remains unsupported. No other registries, no other
+forges, no plugin system. The full list of deliberate exclusions is `SPEC.md`
+§2.
 
 Prereleases never touch the `latest` dist-tag by default — `1.2.0-beta.1`
 publishes to `beta`.

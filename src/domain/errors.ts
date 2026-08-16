@@ -1,3 +1,5 @@
+import type { ReleaseCheck } from './checks.js'
+
 export abstract class ReleaserError extends Error {
   abstract readonly kind: string
   abstract readonly remediation: string
@@ -14,6 +16,15 @@ export abstract class ReleaserError extends Error {
 export class UsageError extends ReleaserError {
   readonly kind = 'UsageError'
   readonly remediation = 'Run `releaser --help` for valid command options.'
+}
+
+export class InvalidWorkingDirectory extends ReleaserError {
+  readonly kind = 'UsageError'
+  readonly remediation = 'Pass --cwd with an existing directory path.'
+
+  constructor(path: string) {
+    super(`Working directory does not exist: ${path}`, { path })
+  }
 }
 
 export class Cancelled extends ReleaserError {
@@ -373,7 +384,7 @@ export class PreflightFailed extends ReleaserError {
   readonly kind = 'PreflightFailed'
   readonly remediation = 'Resolve the blocking preflight checks and retry.'
 
-  constructor(checks: unknown) {
+  constructor(checks: readonly ReleaseCheck[]) {
     super('Release preflight failed', { checks })
   }
 }

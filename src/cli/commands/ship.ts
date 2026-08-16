@@ -1,6 +1,6 @@
 import * as prompts from '@clack/prompts'
 import type { Command } from 'commander'
-import { isBlocked, unoverridableBlockers } from '../../domain/checks.js'
+import type { ReleaseCheck } from '../../domain/checks.js'
 import {
   Cancelled,
   CancelledAfterPreparation,
@@ -8,20 +8,24 @@ import {
   UsageError,
 } from '../../domain/errors.js'
 import type { ShipPlan } from '../../domain/ship-plan.js'
+import { renderCheckRows, type CheckRowView } from '../../ui/index.js'
 import {
   executePlannedRelease,
   planRelease,
   type ReleaseCommandOptions,
 } from '../release-service.js'
 import { inspectShip, planShip, prepareShip, type ShipCommandOptions } from '../ship-service.js'
+import { authorizePreflight } from '../preflight-overrides.js'
+import { createCliOutputContext, type CliOutputOptions } from '../output-context.js'
 
-type CliOptions = ShipCommandOptions & { json?: boolean }
+type CliOptions = ShipCommandOptions & CliOutputOptions
 
 function canPrompt(options: CliOptions): boolean {
+  const output = createCliOutputContext(options)
   return (
     process.stdin.isTTY === true &&
     options.yes !== true &&
-    options.json !== true &&
+    !output.json &&
     options.interactive !== false
   )
 }
@@ -72,25 +76,59 @@ async function confirm(message: string): Promise<void> {
   }
 }
 
-function assertReleaseCanExecute(
+function assertReleasePlanned(
   result: Awaited<ReturnType<typeof planRelease>>,
-  allowOverrides: boolean,
 ): asserts result is Extract<Awaited<ReturnType<typeof planRelease>>, { kind: 'planned' }> {
-  if (
-    result.kind !== 'planned' ||
-    unoverridableBlockers(result.checks).length > 0 ||
-    (isBlocked(result.checks) && !allowOverrides)
-  ) {
+  if (result.kind !== 'planned') {
     throw new PreflightFailed(result.checks)
   }
 }
 
-function assertShipReleaseReady(
-  result: Awaited<ReturnType<typeof planRelease>>,
-): asserts result is Extract<Awaited<ReturnType<typeof planRelease>>, { kind: 'planned' }> {
-  if (result.kind !== 'planned' || unoverridableBlockers(result.checks).length > 0) {
-    throw new PreflightFailed(result.checks)
+function checkView(check: ReleaseCheck): CheckRowView {
+  if (check.outcome === 'passed' || check.outcome === 'informed') {
+    return {
+      status: 'passed',
+      title: check.title,
+      ...(check.outcome === 'informed' ? { message: check.message } : {}),
+    }
   }
+  if (check.outcome === 'skipped') {
+    return { status: 'skipped', title: check.title, message: check.reason }
+  }
+  return {
+    status: check.outcome === 'warned' ? 'warned' : 'blocked',
+    title: check.title,
+    message: check.message,
+    remediation: check.remediation,
+  }
+}
+
+function renderChecks(checks: readonly ReleaseCheck[], options: CliOutputOptions): void {
+  const output = createCliOutputContext(options)
+  console.log(renderCheckRows(checks.map(checkView), output.stdout))
+}
+
+async function confirmOverride(message: string): Promise<boolean> {
+  const answer = await prompts.confirm({ message })
+  return !prompts.isCancel(answer) && answer
+}
+
+async function authorizeRelease(
+  result: Awaited<ReturnType<typeof planRelease>>,
+  options: CliOptions,
+  interactive: boolean,
+) {
+  const output = createCliOutputContext(options)
+  if (!output.json) {
+    renderChecks(result.checks, options)
+  }
+  const acceptedOverrideCheckIds = await authorizePreflight(result.checks, {
+    yes: options.yes === true,
+    canPrompt: interactive,
+    ...(interactive ? { confirmOverride } : {}),
+  })
+  assertReleasePlanned(result)
+  return { result, acceptedOverrideCheckIds }
 }
 
 function renderPreparation(
@@ -99,6 +137,7 @@ function renderPreparation(
   readiness: Extract<Awaited<ReturnType<typeof planRelease>>, { kind: 'planned' }>,
   dryRun: boolean,
 ): void {
+  const output = createCliOutputContext(options)
   const value = {
     kind: dryRun ? 'ship-dry-run' : 'ship-preparation',
     preparation: plan,
@@ -108,7 +147,7 @@ function renderPreparation(
       ? { releasePlan: 'recomputed after the local merge, before release mutations' }
       : {}),
   }
-  console.log(JSON.stringify(value, null, options.json ? 0 : 2))
+  console.log(JSON.stringify(value, null, output.json ? 0 : 2))
 }
 
 async function executePreparedRelease(
@@ -123,14 +162,14 @@ async function executePreparedRelease(
     interactive,
   }
   const releasePlan = await planRelease(releaseOptions)
-  assertReleaseCanExecute(releasePlan, options.yes === true || interactive)
-  if (options.json !== true) {
+  const authorized = await authorizeRelease(releasePlan, options, interactive)
+  if (!createCliOutputContext(options).json) {
     console.log(JSON.stringify(releasePlan, null, 2))
   }
   if (interactive) {
     try {
       await confirm(
-        `Release ${releasePlan.plan.version.nextVersion} from ${shipPlan.targetBranch}?`,
+        `Release ${authorized.result.plan.version.nextVersion} from ${shipPlan.targetBranch}?`,
       )
     } catch (error) {
       if (error instanceof Cancelled) {
@@ -139,7 +178,10 @@ async function executePreparedRelease(
       throw error
     }
   }
-  const release = await executePlannedRelease(releasePlan.plan, releaseOptions)
+  const release = await executePlannedRelease(authorized.result.plan, {
+    ...releaseOptions,
+    acceptedOverrideCheckIds: authorized.acceptedOverrideCheckIds,
+  })
   return { kind: 'shipped', preparation, release } as const
 }
 
@@ -149,15 +191,16 @@ export async function runShipWizard(initialOptions: CliOptions): Promise<void> {
     throw new UsageError('Non-interactive ship requires --yes because it commits and merges code.')
   }
   const options = interactive ? await completeShipOptions(initialOptions) : initialOptions
+  const output = createCliOutputContext(options)
   const shipPlan = await planShip(options)
   const readiness = await planRelease({ ...options, cwd: shipPlan.repositoryRoot })
-  assertShipReleaseReady(readiness)
+  const authorized = await authorizeRelease(readiness, options, interactive)
   if (options.dryRun === true) {
-    renderPreparation(options, shipPlan, readiness, true)
+    renderPreparation(options, shipPlan, authorized.result, true)
     return
   }
-  if (options.json !== true) {
-    renderPreparation(options, shipPlan, readiness, false)
+  if (!output.json) {
+    renderPreparation(options, shipPlan, authorized.result, false)
   }
   if (interactive) {
     await confirm(
@@ -165,7 +208,7 @@ export async function runShipWizard(initialOptions: CliOptions): Promise<void> {
     )
   }
   const result = await executePreparedRelease(options, shipPlan, interactive)
-  console.log(options.json === true ? JSON.stringify(result) : JSON.stringify(result, null, 2))
+  console.log(output.json ? JSON.stringify(result) : JSON.stringify(result, null, 2))
 }
 
 export function registerShipCommand(program: Command): void {

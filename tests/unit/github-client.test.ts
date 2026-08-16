@@ -146,6 +146,15 @@ describe('GitHub API reads', () => {
     await expect(client.readAuthenticatedLogin()).rejects.toBeInstanceOf(GitHubAuthFailed)
   })
 
+  it('distinguishes an invalid token while resuming a release lookup', async () => {
+    const transport = createQueueTransport([apiFailure(401)])
+    const client = createGitHubClient('secret', { transport })
+
+    await expect(client.readReleaseByTag(repository, 'v1.2.0')).rejects.toBeInstanceOf(
+      GitHubAuthFailed,
+    )
+  })
+
   it('retries idempotent reads after 5xx and rate limits with bounded delays', async () => {
     const transport = createQueueTransport([
       apiFailure(503),

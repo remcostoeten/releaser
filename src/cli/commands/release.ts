@@ -1,18 +1,19 @@
 import * as prompts from '@clack/prompts'
 import type { Command } from 'commander'
-import { isBlocked, unoverridableBlockers } from '../../domain/checks.js'
 import { Cancelled, PreflightFailed } from '../../domain/errors.js'
+import type { ReleaseCheck } from '../../domain/checks.js'
+import { renderCheckRows, type CheckRowView } from '../../ui/index.js'
 import {
   executePlannedRelease,
   planRelease,
   type ReleaseCommandOptions,
 } from '../release-service.js'
+import { authorizePreflight } from '../preflight-overrides.js'
+import { createCliOutputContext, type CliOutputOptions } from '../output-context.js'
 import { inspectShip } from '../ship-service.js'
 import { runShipWizard } from './ship.js'
 
-type CliOptions = ReleaseCommandOptions & {
-  json?: boolean
-}
+type CliOptions = ReleaseCommandOptions & CliOutputOptions
 
 async function promptForSelection(options: CliOptions): Promise<CliOptions> {
   if (options.bump !== undefined || options.version !== undefined) {
@@ -34,23 +35,27 @@ async function promptForSelection(options: CliOptions): Promise<CliOptions> {
 }
 
 async function runWizard(options: CliOptions): Promise<void> {
+  const initialOutput = createCliOutputContext(options)
   const canPrompt =
     process.stdin.isTTY === true &&
     options.yes !== true &&
-    options.json !== true &&
+    !initialOutput.json &&
     options.interactive !== false
   const selected = canPrompt ? await promptForSelection(options) : options
+  const output = createCliOutputContext(selected)
   const planned = await planRelease(selected)
+  if (!output.json) {
+    console.log(renderCheckRows(planned.checks.map(checkView), output.stdout))
+  }
+  const acceptedOverrideCheckIds = await authorizePreflight(planned.checks, {
+    yes: selected.yes === true,
+    canPrompt,
+    ...(canPrompt ? { confirmOverride } : {}),
+  })
   if (planned.kind !== 'planned') {
     throw new PreflightFailed(planned.checks)
   }
-  if (
-    unoverridableBlockers(planned.checks).length > 0 ||
-    (isBlocked(planned.checks) && selected.yes !== true && !canPrompt)
-  ) {
-    throw new PreflightFailed(planned.checks)
-  }
-  if (selected.json !== true) {
+  if (!output.json) {
     console.log(JSON.stringify(planned, null, 2))
   }
   if (canPrompt) {
@@ -61,6 +66,7 @@ async function runWizard(options: CliOptions): Promise<void> {
   }
   const result = await executePlannedRelease(planned.plan, {
     ...selected,
+    acceptedOverrideCheckIds,
     yes: selected.yes === true || canPrompt,
     interactive: canPrompt,
     requestOtp: async () => {
@@ -71,7 +77,31 @@ async function runWizard(options: CliOptions): Promise<void> {
       return otp
     },
   })
-  console.log(selected.json === true ? JSON.stringify(result) : JSON.stringify(result, null, 2))
+  console.log(output.json ? JSON.stringify(result) : JSON.stringify(result, null, 2))
+}
+
+function checkView(check: ReleaseCheck): CheckRowView {
+  if (check.outcome === 'passed' || check.outcome === 'informed') {
+    return {
+      status: 'passed',
+      title: check.title,
+      ...(check.outcome === 'informed' ? { message: check.message } : {}),
+    }
+  }
+  if (check.outcome === 'skipped') {
+    return { status: 'skipped', title: check.title, message: check.reason }
+  }
+  return {
+    status: check.outcome === 'warned' ? 'warned' : 'blocked',
+    title: check.title,
+    message: check.message,
+    remediation: check.remediation,
+  }
+}
+
+async function confirmOverride(message: string): Promise<boolean> {
+  const answer = await prompts.confirm({ message })
+  return !prompts.isCancel(answer) && answer
 }
 
 export function registerReleaseCommand(program: Command): void {
@@ -90,10 +120,11 @@ export function registerReleaseCommand(program: Command): void {
 }
 
 function canPromptForRoot(options: CliOptions): boolean {
+  const output = createCliOutputContext(options)
   return (
     process.stdin.isTTY === true &&
     options.yes !== true &&
-    options.json !== true &&
+    !output.json &&
     options.interactive !== false
   )
 }

@@ -1,5 +1,3 @@
-import { realpath } from 'node:fs/promises'
-import { resolve } from 'node:path'
 import { createShipPlan, type CreateShipPlanRequest } from '../application/create-ship-plan.js'
 import { executeShipPlan } from '../application/execute-ship-plan.js'
 import { loadConfig } from '../config/load.js'
@@ -25,6 +23,7 @@ import {
 } from '../git/index.js'
 import { createCommandRunner } from '../shared/command-runner.js'
 import type { ReleaseCommandOptions } from './release-service.js'
+import { resolveWorkingDirectory } from './resolve-cwd.js'
 
 export type ShipCommandOptions = ReleaseCommandOptions & {
   source?: string
@@ -42,7 +41,7 @@ export type ShipContext = Readonly<{
 }>
 
 async function repositoryRoot(cwd: string | undefined): Promise<string> {
-  const candidate = await realpath(resolve(cwd ?? process.cwd()))
+  const candidate = await resolveWorkingDirectory(cwd)
   const runner = createCommandRunner()
   const location = await createGitReader(runner, { cwd: candidate, remote: 'origin' }).locate()
   if (location.kind === 'not-a-repository') {

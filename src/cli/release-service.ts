@@ -1,6 +1,4 @@
 import { randomUUID } from 'node:crypto'
-import { realpath } from 'node:fs/promises'
-import { resolve } from 'node:path'
 import { createExecutionDependencies } from '../application/create-execution-dependencies.js'
 import { createNotesReader } from '../application/create-notes-reader.js'
 import { createReleasePlan } from '../application/create-release-plan.js'
@@ -10,6 +8,7 @@ import { loadConfig } from '../config/load.js'
 import { isBlocked, unoverridableBlockers } from '../domain/checks.js'
 import { GitHubAuthFailed, InvalidJournal, PreflightFailed, UsageError } from '../domain/errors.js'
 import type { ReleasePlan } from '../domain/release-plan.js'
+import type { ReleaseCheckId } from '../domain/checks.js'
 import { PlanId, ReleasePlanCreatedAt } from '../domain/semantic.js'
 import type { VersionSelection } from '../domain/version.js'
 import { createGitReader } from '../git/git-reader.js'
@@ -24,6 +23,7 @@ import { defaultRedactor } from '../shared/redaction.js'
 import { createMutationPlanner } from '../versioning/mutation-planner.js'
 import { createVersionScanner } from '../versioning/scanner.js'
 import { EXIT_CODES } from './exit-codes.js'
+import { resolveWorkingDirectory } from './resolve-cwd.js'
 
 export type ReleaseCommandOptions = {
   cwd?: string
@@ -36,6 +36,7 @@ export type ReleaseCommandOptions = {
   verbose?: boolean
   otp?: string
   requestOtp?: () => Promise<string | null>
+  acceptedOverrideCheckIds?: readonly ReleaseCheckId[]
 }
 
 function versionSelection(options: ReleaseCommandOptions): VersionSelection {
@@ -55,7 +56,7 @@ function versionSelection(options: ReleaseCommandOptions): VersionSelection {
 }
 
 async function repositoryRoot(cwd: string | undefined): Promise<string> {
-  const candidate = await realpath(resolve(cwd ?? process.cwd()))
+  const candidate = await resolveWorkingDirectory(cwd)
   const runner = createCommandRunner()
   const location = await createGitReader(runner, { cwd: candidate, remote: 'origin' }).locate()
   return location.kind === 'not-a-repository' ? candidate : location.root
@@ -137,12 +138,15 @@ async function buildPlan(options: ReleaseCommandOptions): Promise<CreateReleaseP
 
 function assertExecutablePlan(
   result: CreateReleasePlanResult,
-  yes: boolean,
+  acceptedOverrides: readonly ReleaseCheckId[],
 ): asserts result is Extract<CreateReleasePlanResult, { kind: 'planned' }> {
   if (result.kind !== 'planned' || unoverridableBlockers(result.checks).length > 0) {
     throw new PreflightFailed(result.checks)
   }
-  if (isBlocked(result.checks) && !yes) {
+  const unaccepted = result.checks.filter(
+    (check) => check.outcome === 'blocked' && !acceptedOverrides.includes(check.id),
+  )
+  if (isBlocked(unaccepted)) {
     throw new PreflightFailed(result.checks)
   }
 }
@@ -196,7 +200,13 @@ export async function readReleaseStatus(options: ReleaseCommandOptions) {
 
 export async function runRelease(options: ReleaseCommandOptions) {
   const planned = await buildPlan(options)
-  assertExecutablePlan(planned, options.yes === true)
+  const accepted =
+    options.yes === true
+      ? planned.checks.flatMap((check) =>
+          check.outcome === 'blocked' && check.overridable ? [check.id] : [],
+        )
+      : (options.acceptedOverrideCheckIds ?? [])
+  assertExecutablePlan(planned, accepted)
   return executePlannedRelease(planned.plan, options)
 }
 
@@ -245,6 +255,9 @@ export async function resumeReleaseFromCli(options: ReleaseCommandOptions) {
     })
     const npm = createNpmClient(runner, stored.plan.repositoryRoot)
     const token = resolveGitHubToken()
+    if (stored.plan.githubRelease.kind === 'create' && token === null) {
+      throw new GitHubAuthFailed('missing')
+    }
     const github =
       stored.plan.githubRelease.kind === 'create' && token !== null
         ? createGitHubClient(token.value)

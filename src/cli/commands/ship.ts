@@ -175,15 +175,6 @@ export function registerShipCommand(program: Command): void {
     .option('--target <branch>', 'release branch; detected from configuration by default')
     .option('-m, --message <message>', 'commit message for uncommitted feature changes')
     .option('--merge-message <message>', 'merge commit message')
-    .option('--bump <kind>', 'patch, minor, major, or prerelease')
-    .option('--version <semver>', 'explicit target version')
-    .option('--tag <dist-tag>', 'npm dist-tag to publish under')
-    .option('--dry-run', 'show the preparation plan without writing')
-    .option('--yes', 'confirm preparation and release without prompting')
-    .option('--no-interactive', 'never prompt')
-    .option('--json', 'machine-readable output on stdout')
-    .option('--otp <code>', 'npm one-time password')
-    .option('--cwd <path>', 'run against another directory')
     .addHelpText(
       'after',
       '\nExamples:\n  releaser ship --bump patch\n  releaser ship --target master -m "feat: checkout" --bump minor --yes\n  releaser ship --dry-run -m "fix: totals" --bump patch',

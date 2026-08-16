@@ -33,6 +33,7 @@ export type ReleaseCommandOptions = {
   dryRun?: boolean
   yes?: boolean
   interactive?: boolean
+  verbose?: boolean
   otp?: string
   requestOtp?: () => Promise<string | null>
 }

@@ -3,8 +3,8 @@ import { blockingChecks } from '../../domain/checks.js'
 import { renderDoctorReport } from '../../ui/index.js'
 import { doctorReportView } from '../command-reports.js'
 import { EXIT_CODES } from '../exit-codes.js'
+import { createCliOutputContext } from '../output-context.js'
 import { doctorRelease, type ReleaseCommandOptions } from '../release-service.js'
-import { stdoutEnvironment } from './report-environment.js'
 
 export function registerDoctorCommand(program: Command): void {
   program
@@ -16,7 +16,10 @@ export function registerDoctorCommand(program: Command): void {
       console.log(
         options.json === true
           ? JSON.stringify(result)
-          : renderDoctorReport(doctorReportView(result.checks), stdoutEnvironment()),
+          : renderDoctorReport(
+              doctorReportView(result.checks),
+              createCliOutputContext(options).stdout,
+            ),
       )
       if (blockingChecks(result.checks).length > 0) {
         process.exitCode = EXIT_CODES.preflightFailed

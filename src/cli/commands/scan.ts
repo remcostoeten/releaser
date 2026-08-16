@@ -1,8 +1,8 @@
 import type { Command } from 'commander'
 import { renderScanReport } from '../../ui/index.js'
 import { scanReportView } from '../command-reports.js'
+import { createCliOutputContext } from '../output-context.js'
 import { scanRelease, type ReleaseCommandOptions } from '../release-service.js'
-import { stdoutEnvironment } from './report-environment.js'
 
 export function registerScanCommand(program: Command): void {
   program
@@ -14,7 +14,7 @@ export function registerScanCommand(program: Command): void {
       console.log(
         options.json === true
           ? JSON.stringify(result)
-          : renderScanReport(scanReportView(result), stdoutEnvironment()),
+          : renderScanReport(scanReportView(result), createCliOutputContext(options).stdout),
       )
     })
 }

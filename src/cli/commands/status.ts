@@ -1,9 +1,9 @@
 import type { Command } from 'commander'
 import { renderStatusReport } from '../../ui/index.js'
 import { statusReportView } from '../command-reports.js'
+import { createCliOutputContext } from '../output-context.js'
 import { readReleaseStatus, type ReleaseCommandOptions } from '../release-service.js'
 import { readHumanReleaseStatus } from '../status-service.js'
-import { stdoutEnvironment } from './report-environment.js'
 
 export function registerStatusCommand(program: Command): void {
   program
@@ -16,6 +16,8 @@ export function registerStatusCommand(program: Command): void {
         return
       }
       const result = await readHumanReleaseStatus(options)
-      console.log(renderStatusReport(statusReportView(result), stdoutEnvironment()))
+      console.log(
+        renderStatusReport(statusReportView(result), createCliOutputContext(options).stdout),
+      )
     })
 }

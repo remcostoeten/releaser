@@ -16,25 +16,35 @@ export type FileMutation =
       path: RepoRelativePath
       previousVersion: SemVer
       nextVersion: SemVer
-      edits: TextEdit[]
+      edits: readonly TextEdit[]
     }
   | {
       kind: 'lockfile-version'
       path: RepoRelativePath
       previousVersion: SemVer
       nextVersion: SemVer
-      edits: TextEdit[]
+      edits: readonly TextEdit[]
     }
   | {
       kind: 'configured-replacement'
       path: RepoRelativePath
       pattern: ReplacementPattern
       expectedMatches: number
-      edits: TextEdit[]
+      edits: readonly TextEdit[]
     }
 
 function sortedEdits(edits: readonly TextEdit[]): TextEdit[] {
   return edits.toSorted((left, right) => left.offset - right.offset)
+}
+
+function assertNonOverlapping(edits: readonly TextEdit[]): void {
+  let previousEnd = 0
+  for (const edit of edits) {
+    if (edit.offset < previousEnd) {
+      throw new RangeError(`Text edits overlap at offset ${edit.offset}`)
+    }
+    previousEnd = edit.offset + edit.deletedText.length
+  }
 }
 
 export function editsApplyTo(content: string, edits: readonly TextEdit[]): boolean {
@@ -47,8 +57,10 @@ export function editsApplyTo(content: string, edits: readonly TextEdit[]): boole
 export function applyEdits(content: string, edits: readonly TextEdit[]): string {
   let output = ''
   let cursor = 0
+  const orderedEdits = sortedEdits(edits)
+  assertNonOverlapping(orderedEdits)
 
-  for (const edit of sortedEdits(edits)) {
+  for (const edit of orderedEdits) {
     output += content.slice(cursor, edit.offset) + edit.insertedText
     cursor = edit.offset + edit.deletedText.length
   }

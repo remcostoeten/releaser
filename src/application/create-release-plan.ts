@@ -28,6 +28,7 @@ import {
   manifestUnreadableCheck,
   notARepositoryCheck,
   npmAuthenticationCheck,
+  npmAuthenticationSkippedCheck,
   replacementMismatchCheck,
   replacementsMatchCheck,
   repositoryChecks,
@@ -35,6 +36,7 @@ import {
   tagAvailableCheck,
   toolchainChecks,
   versionNotPublishedCheck,
+  versionNotPublishedSkippedCheck,
 } from './preflight.js'
 import {
   buildBoundary,
@@ -42,6 +44,7 @@ import {
   buildNpmPublishAction,
 } from './release-actions.js'
 import { renderTemplate } from './render-template.js'
+import { renderReleaseNotes } from '../notes/render.js'
 
 export type CreateReleasePlanDependencies = {
   toolchain: ToolchainReader
@@ -103,9 +106,9 @@ export async function createReleasePlan(
   const { config } = request
   const [gitVersion, npmVersion] = await Promise.all([
     deps.toolchain.readGitVersion(),
-    deps.toolchain.readNpmVersion(),
+    request.config.npm.publish ? deps.toolchain.readNpmVersion() : Promise.resolve(null),
   ])
-  const checks: ReleaseCheck[] = toolchainChecks(gitVersion, npmVersion)
+  const checks: ReleaseCheck[] = toolchainChecks(gitVersion, npmVersion, request.config.npm.publish)
 
   const lookup = await deps.repository.readState()
 
@@ -128,12 +131,18 @@ export async function createReleasePlan(
   }
 
   const manifest = manifestLookup.manifest
-  checks.push(...manifestChecks(manifest.private))
+  checks.push(...manifestChecks(manifest.private, config.npm.publish))
 
-  const published = await deps.registry.readPublishedVersions(manifest.name)
+  const published = config.npm.publish
+    ? await deps.registry.readPublishedVersions(manifest.name)
+    : { kind: 'never-published' as const }
   const publishedVersions = published.kind === 'published' ? published.versions : []
-  const authentication = await deps.registry.readAuthentication()
-  checks.push(npmAuthenticationCheck(authentication))
+  if (config.npm.publish) {
+    const authentication = await deps.registry.readAuthentication()
+    checks.push(npmAuthenticationCheck(authentication))
+  } else {
+    checks.push(npmAuthenticationSkippedCheck())
+  }
 
   const version = resolveReleaseVersion({
     manifestVersion: manifest.version,
@@ -142,7 +151,11 @@ export async function createReleasePlan(
     explicitDistTag: request.explicitDistTag ?? config.npm.tag,
   })
 
-  checks.push(versionNotPublishedCheck(manifest.name, version.nextVersion, publishedVersions))
+  checks.push(
+    config.npm.publish
+      ? versionNotPublishedCheck(manifest.name, version.nextVersion, publishedVersions)
+      : versionNotPublishedSkippedCheck(),
+  )
 
   const tagName = TagName.from(
     `${config.tagPrefix}${version.nextVersion}`,
@@ -154,10 +167,12 @@ export async function createReleasePlan(
   ])
   checks.push(tagAvailableCheck(tagName, localTag, remoteTag))
 
-  const tokenStatus = await deps.github.readTokenStatus()
   const githubRef = config.github.release
     ? await deps.github.resolveRepository(config.remote)
     : null
+  const tokenStatus = config.github.release
+    ? await deps.github.readTokenStatus(githubRef)
+    : { kind: 'absent' as const }
   checks.push(...githubChecks(config, tokenStatus))
 
   const previousRelease = await deps.repository.findPreviousRelease(config.tagPrefix)
@@ -172,6 +187,7 @@ export async function createReleasePlan(
     checks.push(
       replacementMismatchCheck(
         mutationOutcome.file,
+        mutationOutcome.pattern,
         mutationOutcome.expectedMatches,
         mutationOutcome.actualMatches,
       ),
@@ -186,6 +202,8 @@ export async function createReleasePlan(
     boundary,
     version: version.nextVersion,
     previousVersion: version.previousVersion,
+    githubRepository: githubRef,
+    includePullRequests: tokenStatus.kind === 'valid',
   })
 
   const templateValues = templateValuesFor(version)
@@ -219,6 +237,7 @@ export async function createReleasePlan(
       githubRef,
       tagName,
       prerelease: version.prerelease,
+      body: renderReleaseNotes(notes),
     }),
     notes,
   })

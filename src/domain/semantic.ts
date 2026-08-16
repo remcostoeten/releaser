@@ -3,20 +3,37 @@ import { MalformedValue } from './errors.js'
 
 declare const brand: unique symbol
 
-type Branded<Value, Name extends string> = Value & { readonly [brand]: Name }
+export type Brand<Value, Name extends string> = Value & { readonly [brand]: Name }
 
-export type Sha = Branded<string, 'Sha'>
-export type Digest = Branded<string, 'Digest'>
-export type Ref = Branded<string, 'Ref'>
-export type BranchName = Branded<string, 'BranchName'>
-export type TagName = Branded<string, 'TagName'>
-export type SemVer = Branded<string, 'SemVer'>
-export type DistTagName = Branded<string, 'DistTagName'>
-export type PackageName = Branded<string, 'PackageName'>
-export type AbsolutePath = Branded<string, 'AbsolutePath'>
-export type RepoRelativePath = Branded<string, 'RepoRelativePath'>
-export type Iso8601 = Branded<string, 'Iso8601'>
-export type PlanId = Branded<string, 'PlanId'>
+export type EntityId<Entity extends string> = Brand<string, `EntityId:${Entity}`>
+export type Timestamp<Meaning extends string> = Brand<string, `Timestamp:${Meaning}`>
+export type Timestamps = Readonly<{
+  createdAt: Timestamp<'createdAt'>
+  updatedAt: Timestamp<'updatedAt'>
+}>
+export type BaseEntity<Entity extends string> = Readonly<{
+  id: EntityId<Entity>
+}> &
+  Timestamps
+
+export type Sha = Brand<string, 'Sha'>
+export type Digest = Brand<string, 'Digest'>
+export type Ref = Brand<string, 'Ref'>
+export type BranchName = Brand<string, 'BranchName'>
+export type TagName = Brand<string, 'TagName'>
+export type SemVer = Brand<string, 'SemVer'>
+export type DistTagName = Brand<string, 'DistTagName'>
+export type PackageName = Brand<string, 'PackageName'>
+export type NpmUsername = Brand<string, 'NpmUsername'>
+export type NpmShasum = Brand<string, 'NpmShasum'>
+export type NpmIntegrity = Brand<string, 'NpmIntegrity'>
+export type AbsolutePath = Brand<string, 'AbsolutePath'>
+export type RepoRelativePath = Brand<string, 'RepoRelativePath'>
+export type PlanId = EntityId<'ReleasePlan'>
+export type ChangeId = EntityId<'Change'>
+export type ReleasePlanCreatedAt = Timestamp<'ReleasePlan.createdAt'>
+export type CommitAuthoredAt = Timestamp<'Commit.authoredAt'>
+export type PullRequestMergedAt = Timestamp<'PullRequest.mergedAt'>
 
 /**
  * Anything Git accepts where it documents a `<commit>` or `<rev>`: a SHA, a
@@ -54,10 +71,23 @@ function semanticType<Value extends string>(
   }
 }
 
+export function EntityId<Entity extends string>(entity: Entity): SemanticType<EntityId<Entity>> {
+  return semanticType(`${entity}Id`, (value) => value.length > 0 && !/\s/u.test(value))
+}
+
+export function Timestamp<Meaning extends string>(
+  meaning: Meaning,
+): SemanticType<Timestamp<Meaning>> {
+  return semanticType(`${meaning}Timestamp`, (value) => ISO_8601_PATTERN.test(value))
+}
+
 const SHA_PATTERN = /^[0-9a-f]{7,64}$/u
 const DIGEST_PATTERN = /^[0-9a-f]{64}$/u
 const ISO_8601_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/u
 const PACKAGE_NAME_PATTERN = /^(?:@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/u
+const NPM_USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]*$/iu
+const NPM_SHASUM_PATTERN = /^[0-9a-f]{40}$/u
+const NPM_INTEGRITY_PATTERN = /^sha(?:256|384|512)-[A-Za-z0-9+/]+={0,2}$/u
 const WINDOWS_ABSOLUTE_PATTERN = /^[A-Za-z]:[\\/]/u
 
 function isRefName(value: string): boolean {
@@ -118,6 +148,18 @@ export const PackageName: SemanticType<PackageName> = semanticType(
   (value) => value.length <= 214 && PACKAGE_NAME_PATTERN.test(value),
 )
 
+export const NpmUsername: SemanticType<NpmUsername> = semanticType('NpmUsername', (value) =>
+  NPM_USERNAME_PATTERN.test(value),
+)
+
+export const NpmShasum: SemanticType<NpmShasum> = semanticType('NpmShasum', (value) =>
+  NPM_SHASUM_PATTERN.test(value),
+)
+
+export const NpmIntegrity: SemanticType<NpmIntegrity> = semanticType('NpmIntegrity', (value) =>
+  NPM_INTEGRITY_PATTERN.test(value),
+)
+
 export const AbsolutePath: SemanticType<AbsolutePath> = semanticType(
   'AbsolutePath',
   (value) => value.startsWith('/') || WINDOWS_ABSOLUTE_PATTERN.test(value),
@@ -137,11 +179,14 @@ export const RepoRelativePath: SemanticType<RepoRelativePath> = semanticType(
     !value.split(/[\\/]/u).includes('..'),
 )
 
-export const Iso8601: SemanticType<Iso8601> = semanticType('Iso8601', (value) =>
-  ISO_8601_PATTERN.test(value),
-)
-
 export const PlanId: SemanticType<PlanId> = semanticType(
   'PlanId',
   (value) => value.length > 0 && !/\s/u.test(value),
 )
+
+export const ChangeId: SemanticType<ChangeId> = EntityId('Change')
+export const ReleasePlanCreatedAt: SemanticType<ReleasePlanCreatedAt> =
+  Timestamp('ReleasePlan.createdAt')
+export const CommitAuthoredAt: SemanticType<CommitAuthoredAt> = Timestamp('Commit.authoredAt')
+export const PullRequestMergedAt: SemanticType<PullRequestMergedAt> =
+  Timestamp('PullRequest.mergedAt')

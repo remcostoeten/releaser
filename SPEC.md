@@ -8,9 +8,9 @@ rather than invent.
 
 ## 1. Purpose
 
-A safe, resumable CLI that takes a single-package JavaScript/TypeScript
-repository from "current state" to "published npm version + Git tag + GitHub
-Release", with every decision made and displayed *before* any mutation occurs.
+A safe, resumable CLI that takes one repository release unit from "current
+state" to its configured combination of npm publication, Git tag, and GitHub
+Release, with every decision made and displayed *before* any mutation occurs.
 
 The central idea: **plan, then execute**. Planning is pure and read-only.
 Execution is a separate, journalled, resumable pass over an immutable plan.
@@ -19,7 +19,9 @@ Execution is a separate, journalled, resumable pass over an immutable plan.
 
 Do not build, and do not leave scaffolding for:
 
-- Monorepos or npm/pnpm workspaces. Exactly one publishable package per run.
+- Publishing multiple packages or independently versioned workspace packages.
+  A repository may contain workspaces when npm publication is disabled, but one
+  run still produces exactly one repository version and one tag.
 - Registries other than npm (no JSR, no private GitLab registries).
 - Forges other than GitHub (no GitLab, no Bitbucket, no Gitea).
 - Generic plugin systems, provider registries, DI containers.
@@ -103,8 +105,9 @@ custom version.
 Rules:
 
 - The proposed version must be valid SemVer.
-- The proposed version must be strictly greater than **both** the local
-  manifest version and the highest version published to the registry.
+- The proposed version must be strictly greater than the configured local
+  version. When npm publication is enabled, it must also exceed the highest
+  version published to the registry.
 - A custom version equal to or below either is rejected at plan time.
 - A prerelease version must not be published to the `latest` dist-tag.
   Default dist-tag for a prerelease is derived from its prerelease identifier
@@ -126,7 +129,7 @@ where marked *overridable*.
 |---|---|---|
 | Inside a Git repository | blocking | no |
 | `git` executable present and ≥ 2.30 | blocking | no |
-| `npm` executable present | blocking | no |
+| `npm` executable present, when publishing to npm | blocking | no |
 | Working tree clean | blocking | yes |
 | Not in detached HEAD | blocking | yes |
 | Remote `origin` configured | blocking | no |
@@ -137,8 +140,8 @@ where marked *overridable*.
 | Target tag does not already exist (local or remote) | blocking | no |
 | Target version not already published | blocking | no |
 | `package.json` readable and valid | blocking | no |
-| Package not `private: true` | blocking | no |
-| npm authentication resolves to a user | blocking | no |
+| Package not `private: true`, when publishing to npm | blocking | no |
+| npm authentication resolves to a user, when publishing to npm | blocking | no |
 | GitHub token present and valid | blocking | yes (skips GitHub Release stage) |
 | GitHub token has `contents: write` on the repo | warning | yes |
 | Every configured replacement matches its `expectedMatches` | blocking | no |
@@ -337,9 +340,11 @@ occurrences" mode.
 
 ### 9.3 Manifest and lockfile
 
-`package.json` is mutated by targeted edit, preserving key order, indentation,
-and trailing newline. Never re-serialize the whole object with
-`JSON.stringify`, and never rewrite it with a regex over the raw text.
+The configured JSON `versionFile` is mutated by targeted edit, preserving key
+order, indentation, and trailing newline. It defaults to `package.json`. Never
+re-serialize the whole object with `JSON.stringify`, and never rewrite it with
+a regex over the raw text. A non-`package.json` version source is allowed only
+when npm publication is disabled.
 
 Lockfiles are synchronized where the format records the package's own version:
 `package-lock.json` (`version`, `packages[""].version`). `pnpm-lock.yaml` and
@@ -390,6 +395,7 @@ pins it.
 {
   "releaseBranch": null,
   "remote": "origin",
+  "versionFile": "package.json",
   "tagPrefix": "v",
   "commitMessage": "chore(release): {{version}}",
   "tagMessage": "{{version}}",

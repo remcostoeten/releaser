@@ -8,7 +8,7 @@ import type {
 import type { FileMutation } from './mutations.js'
 import type { ReleaseNotes } from './release-notes.js'
 import type { ReleaseBoundary, RepositoryFingerprint } from './repository.js'
-import type { AbsolutePath, Iso8601, PackageName, PlanId } from './semantic.js'
+import type { AbsolutePath, PackageName, PlanId, ReleasePlanCreatedAt } from './semantic.js'
 import type { StageAction, StageName } from './stages.js'
 import type { ReleaseVersion } from './version.js'
 
@@ -17,7 +17,7 @@ export const RELEASE_PLAN_SCHEMA_VERSION = 1
 export type ReleasePlan = Readonly<{
   schemaVersion: 1
   id: PlanId
-  createdAt: Iso8601
+  createdAt: ReleasePlanCreatedAt
   repositoryRoot: AbsolutePath
   packageName: PackageName
   fingerprint: RepositoryFingerprint

@@ -15,10 +15,10 @@ import {
   branch,
   digest,
   packageName,
+  planCreatedAt,
   planId,
   ref,
   sha,
-  timestamp,
   version,
 } from './semantic.js'
 
@@ -54,6 +54,7 @@ export const READ_ONLY_PORT_METHODS = [
   'registry.readAuthentication',
   'github.resolveRepository',
   'github.readTokenStatus',
+  'github.readMergedPullRequests',
   'mutations.planMutations',
   'notes.collect',
   'clock.now',
@@ -145,6 +146,7 @@ export function createRecordingPorts(options: RecordingPortsOptions = {}): {
           'github.readTokenStatus',
           options.tokenStatus ?? { kind: 'valid' as const, login: 'release-bot', canWrite: true },
         ),
+      readMergedPullRequests: () => record('github.readMergedPullRequests', []),
     },
     mutations: {
       planMutations: () =>
@@ -156,7 +158,7 @@ export function createRecordingPorts(options: RecordingPortsOptions = {}): {
     clock: {
       now: () => {
         recorder.calls.push('clock.now')
-        return timestamp('2026-01-01T00:00:00.000Z')
+        return planCreatedAt('2026-01-01T00:00:00.000Z')
       },
     },
     ids: {

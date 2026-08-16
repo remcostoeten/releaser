@@ -103,4 +103,12 @@ describe('parseRemoteUrl', () => {
     expect(parseRemoteUrl('https://github.com/releaser')).toBeNull()
     expect(parseRemoteUrl('git@github.com:releaser')).toBeNull()
   })
+
+  it('preserves GitHub Enterprise hosts', () => {
+    expect(parseRemoteUrl('ssh://git@github.company.test/platform/releaser.git')).toEqual({
+      host: 'github.company.test',
+      owner: 'platform',
+      repo: 'releaser',
+    })
+  })
 })

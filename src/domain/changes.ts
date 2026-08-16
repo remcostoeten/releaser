@@ -1,4 +1,4 @@
-import type { Iso8601, Sha } from './semantic.js'
+import type { ChangeId, CommitAuthoredAt, PullRequestMergedAt, Sha } from './semantic.js'
 
 export type ChangeCategory =
   | 'breaking'
@@ -26,7 +26,7 @@ export type CommitSummary = {
   subject: string
   body: string
   author: string
-  authoredAt: Iso8601
+  authoredAt: CommitAuthoredAt
   parents: Sha[]
 }
 
@@ -34,7 +34,7 @@ export type PullRequestSummary = {
   number: number
   title: string
   author: string
-  mergedAt: Iso8601
+  mergedAt: PullRequestMergedAt
   mergeCommitSha: Sha | null
   labels: string[]
 }
@@ -44,7 +44,7 @@ export type ChangeOrigin =
   | { kind: 'pull-request'; number: number; mergeCommitSha: Sha | null }
 
 export type Change = {
-  id: string
+  id: ChangeId
   title: string
   category: ChangeCategory
   author: string | null

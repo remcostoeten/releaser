@@ -16,27 +16,38 @@ export const replacementSchema = z.strictObject({
   expectedMatches: z.number().int().positive(),
 })
 
-export const releaserConfigSchema = z.strictObject({
-  releaseBranch: z.string().min(1).nullable().default(null),
-  remote: z.string().min(1).default('origin'),
-  tagPrefix: z.string().default('v'),
-  commitMessage: z.string().min(1).default('chore(release): {{version}}'),
-  tagMessage: z.string().min(1).default('{{version}}'),
-  npm: z
-    .strictObject({
-      publish: z.boolean().default(true),
-      access: z.enum(['public', 'restricted']).default('public'),
-      tag: z.string().min(1).nullable().default(null),
-    })
-    .default({ publish: true, access: 'public', tag: null }),
-  github: z
-    .strictObject({
-      release: z.boolean().default(true),
-      draft: z.boolean().default(false),
-    })
-    .default({ release: true, draft: false }),
-  replacements: z.array(replacementSchema).default([]),
-})
+export const releaserConfigSchema = z
+  .strictObject({
+    releaseBranch: z.string().min(1).nullable().default(null),
+    remote: z.string().min(1).default('origin'),
+    versionFile: z.string().min(1).default('package.json'),
+    tagPrefix: z.string().default('v'),
+    commitMessage: z.string().min(1).default('chore(release): {{version}}'),
+    tagMessage: z.string().min(1).default('{{version}}'),
+    npm: z
+      .strictObject({
+        publish: z.boolean().default(true),
+        access: z.enum(['public', 'restricted']).default('public'),
+        tag: z.string().min(1).nullable().default(null),
+      })
+      .default({ publish: true, access: 'public', tag: null }),
+    github: z
+      .strictObject({
+        release: z.boolean().default(true),
+        draft: z.boolean().default(false),
+      })
+      .default({ release: true, draft: false }),
+    replacements: z.array(replacementSchema).default([]),
+  })
+  .superRefine((config, context) => {
+    if (config.npm.publish && config.versionFile !== 'package.json') {
+      context.addIssue({
+        code: 'custom',
+        path: ['versionFile'],
+        message: 'must be package.json when npm publication is enabled',
+      })
+    }
+  })
 
 export type ReplacementPatternConfig = z.infer<typeof replacementPatternSchema>
 export type ReplacementConfig = z.infer<typeof replacementSchema>

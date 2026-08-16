@@ -52,6 +52,7 @@ export function buildGitHubReleaseAction(input: {
   githubRef: GitHubRepositoryRef | null
   tagName: TagName
   prerelease: boolean
+  body: string
 }): GitHubReleaseAction {
   if (!input.config.github.release) {
     return { kind: 'skipped', reason: 'github.release is disabled in configuration' }
@@ -78,7 +79,7 @@ export function buildGitHubReleaseAction(input: {
     repo: input.githubRef.repo,
     tagName: input.tagName,
     name: input.tagName,
-    body: '',
+    body: input.body,
     draft: input.config.github.draft,
     prerelease: input.prerelease,
   }

@@ -1,10 +1,11 @@
-import type { FileMutation } from '../domain/mutations.js'
+import type { FileMutation, ReplacementPattern } from '../domain/mutations.js'
+import type { PullRequestSummary } from '../domain/changes.js'
 import type { ReleaseNotes } from '../domain/release-notes.js'
 import type { ReleaseBoundary, RepositoryState } from '../domain/repository.js'
 import type {
-  Iso8601,
   PackageName,
   PlanId,
+  ReleasePlanCreatedAt,
   RepoRelativePath,
   SemVer,
   Sha,
@@ -62,7 +63,11 @@ export type GitHubRepositoryRef = { owner: string; repo: string }
 
 export type GitHubReader = {
   resolveRepository(remote: string): Promise<GitHubRepositoryRef | null>
-  readTokenStatus(): Promise<GitHubTokenStatus>
+  readTokenStatus(repository: GitHubRepositoryRef | null): Promise<GitHubTokenStatus>
+  readMergedPullRequests(
+    repository: GitHubRepositoryRef,
+    commitShas: readonly Sha[],
+  ): Promise<PullRequestSummary[]>
 }
 
 export type ToolchainReader = {
@@ -76,10 +81,11 @@ export type MutationPlanRequest = {
 }
 
 export type MutationPlanOutcome =
-  | { kind: 'planned'; mutations: FileMutation[] }
+  | { kind: 'planned'; mutations: readonly FileMutation[] }
   | {
       kind: 'replacement-mismatch'
       file: RepoRelativePath
+      pattern: ReplacementPattern
       expectedMatches: number
       actualMatches: number
     }
@@ -92,6 +98,8 @@ export type NotesRequest = {
   boundary: ReleaseBoundary
   version: SemVer
   previousVersion: SemVer | null
+  githubRepository: GitHubRepositoryRef | null
+  includePullRequests: boolean
 }
 
 export type NotesReader = {
@@ -99,7 +107,7 @@ export type NotesReader = {
 }
 
 export type PlanClock = {
-  now(): Iso8601
+  now(): ReleasePlanCreatedAt
 }
 
 export type PlanIdFactory = {

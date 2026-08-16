@@ -1,13 +1,16 @@
 import {
   AbsolutePath,
   BranchName,
+  ChangeId,
+  CommitAuthoredAt,
   Digest,
   DistTagName,
-  Iso8601,
   PackageName,
   PlanId,
+  PullRequestMergedAt,
   Ref,
   RepoRelativePath,
+  ReleasePlanCreatedAt,
   SemVer,
   Sha,
   TagName,
@@ -55,10 +58,22 @@ export function repoPath(value: string): RepoRelativePath {
   return RepoRelativePath.from(value, CONTEXT)
 }
 
-export function timestamp(value: string): Iso8601 {
-  return Iso8601.from(value, CONTEXT)
+export function planCreatedAt(value: string): ReleasePlanCreatedAt {
+  return ReleasePlanCreatedAt.from(value, CONTEXT)
+}
+
+export function commitAuthoredAt(value: string): CommitAuthoredAt {
+  return CommitAuthoredAt.from(value, CONTEXT)
+}
+
+export function pullRequestMergedAt(value: string): PullRequestMergedAt {
+  return PullRequestMergedAt.from(value, CONTEXT)
 }
 
 export function planId(value: string): PlanId {
   return PlanId.from(value, CONTEXT)
+}
+
+export function changeId(value: string): ChangeId {
+  return ChangeId.from(value, CONTEXT)
 }

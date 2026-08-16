@@ -11,6 +11,20 @@ export abstract class ReleaserError extends Error {
   }
 }
 
+export class UsageError extends ReleaserError {
+  readonly kind = 'UsageError'
+  readonly remediation = 'Run `releaser --help` for valid command options.'
+}
+
+export class Cancelled extends ReleaserError {
+  readonly kind = 'Cancelled'
+  readonly remediation = 'Run the command again when you are ready.'
+
+  constructor() {
+    super('Release cancelled; nothing was changed')
+  }
+}
+
 export class NotAGitRepository extends ReleaserError {
   readonly kind = 'NotAGitRepository'
   readonly remediation = 'Run this command from within a Git repository.'
@@ -53,6 +67,35 @@ export class BranchDiverged extends ReleaserError {
 
   constructor(branch: string) {
     super(`Branch ${branch} has diverged from upstream`, { branch })
+  }
+}
+
+export class ShipTargetDiverged extends ReleaserError {
+  readonly kind = 'ShipTargetDiverged'
+  readonly remediation = 'Reconcile the local and remote target branch before shipping.'
+
+  constructor(branch: string) {
+    super(`Local and remote ${branch} have diverged`, { branch })
+  }
+}
+
+export class MergeConflict extends ReleaserError {
+  readonly kind = 'MergeConflict'
+  readonly remediation =
+    'Resolve the feature branch against the target branch, then run ship again.'
+
+  constructor(source: string, target: string, files: string[]) {
+    super(`Could not merge ${source} into ${target}`, { source, target, files })
+  }
+}
+
+export class CancelledAfterPreparation extends ReleaserError {
+  readonly kind = 'CancelledAfterPreparation'
+  readonly remediation =
+    'Inspect the local merge, then run `releaser` to release it or reset it manually.'
+
+  constructor(branch: string) {
+    super(`Release cancelled after ${branch} was prepared locally`, { branch })
   }
 }
 
@@ -110,6 +153,19 @@ export class VersionAlreadyPublished extends ReleaserError {
   }
 }
 
+export class PublishedPackageMismatch extends ReleaserError {
+  readonly kind = 'PublishedPackageMismatch'
+  readonly remediation = 'Do not retry publication. Inspect the published tarball and repository.'
+
+  constructor(packageVersion: string, expectedShasum: string, actualShasum: string) {
+    super(`Published package ${packageVersion} does not match the local tarball`, {
+      packageVersion,
+      expectedShasum,
+      actualShasum,
+    })
+  }
+}
+
 export class PackagePrivate extends ReleaserError {
   readonly kind = 'PackagePrivate'
   readonly remediation = 'Set "private": false in package.json or remove the field.'
@@ -123,9 +179,10 @@ export class ReplacementMatchCount extends ReleaserError {
   readonly kind = 'ReplacementMatchCount'
   readonly remediation = 'Adjust the replacement pattern or expectedMatches count.'
 
-  constructor(file: string, expected: number, actual: number) {
+  constructor(file: string, pattern: string, expected: number, actual: number) {
     super(`Replacement in ${file} matched ${actual} time(s), expected ${expected}`, {
       file,
+      pattern,
       expected,
       actual,
     })
@@ -137,12 +194,26 @@ export class NpmAuthFailed extends ReleaserError {
   readonly remediation = 'Run `npm login` or set NODE_AUTH_TOKEN.'
 }
 
+export class NpmRegistryUnavailable extends ReleaserError {
+  readonly kind = 'NpmRegistryUnavailable'
+  readonly remediation = 'Check the configured npm registry and network connection, then retry.'
+}
+
+export class NpmRegistryUnauthorized extends ReleaserError {
+  readonly kind = 'NpmRegistryUnauthorized'
+  readonly remediation = 'Run `npm login` with an account that can read this package.'
+
+  constructor(packageName: string) {
+    super(`npm denied access to ${packageName}`, { packageName })
+  }
+}
+
 export class OtpRequired extends ReleaserError {
   readonly kind = 'OtpRequired'
   readonly remediation = 'Provide an OTP with --otp or use an automation token.'
 
-  constructor() {
-    super('npm requires a one-time password')
+  constructor(retryPossible = true) {
+    super('npm requires a one-time password', { retryPossible })
   }
 }
 
@@ -157,7 +228,22 @@ export class LifecycleScriptFailed extends ReleaserError {
 
 export class GitHubAuthFailed extends ReleaserError {
   readonly kind = 'GitHubAuthFailed'
-  readonly remediation = 'Set a valid GITHUB_TOKEN with appropriate permissions.'
+  readonly remediation: string
+
+  constructor(reason: 'missing' | 'invalid' | 'insufficient-permission') {
+    const messages = {
+      missing: 'No GitHub token was found',
+      invalid: 'GitHub rejected the configured token',
+      'insufficient-permission': 'GitHub token lacks contents: write permission',
+    }
+    const remediations = {
+      missing: 'Set GITHUB_TOKEN or GH_TOKEN, or authenticate with `gh auth login`.',
+      invalid: 'Replace GITHUB_TOKEN or GH_TOKEN with a valid token.',
+      'insufficient-permission': 'Use a token with contents: write permission for this repository.',
+    }
+    super(messages[reason], { reason })
+    this.remediation = remediations[reason]
+  }
 }
 
 export class GitHubApiError extends ReleaserError {
@@ -196,12 +282,34 @@ export class JournalLocked extends ReleaserError {
   }
 }
 
+export class InvalidJournal extends ReleaserError {
+  readonly kind = 'InvalidJournal'
+  readonly remediation = 'Inspect the journal file and restore it from a valid backup, or re-plan.'
+
+  constructor(source: string, issues: unknown) {
+    super(`Release journal in ${source} is not valid`, { source, issues })
+  }
+}
+
 export class PartialRelease extends ReleaserError {
   readonly kind = 'PartialRelease'
-  readonly remediation = 'Run `releaser resume` to complete the release.'
+  readonly remediation: string
 
-  constructor(completedStages: string[], failedStage?: string) {
-    super('Release partially completed', { completedStages, failedStage })
+  constructor(
+    completedStages: string[],
+    failedStage?: string,
+    remainingStages: string[] = [],
+    resumeCommand = 'releaser resume',
+    failure?: string,
+  ) {
+    super('Release partially completed', {
+      completedStages,
+      failedStage,
+      remainingStages,
+      resumeCommand,
+      failure,
+    })
+    this.remediation = `Run \`${resumeCommand}\` to complete the release.`
   }
 }
 
@@ -235,6 +343,15 @@ export class CommandExecutionFailed extends ReleaserError {
 export class ConfigurationError extends ReleaserError {
   readonly kind = 'ConfigurationError'
   readonly remediation = 'Fix the configuration error and retry.'
+}
+
+export class PreflightFailed extends ReleaserError {
+  readonly kind = 'PreflightFailed'
+  readonly remediation = 'Resolve the blocking preflight checks and retry.'
+
+  constructor(checks: unknown) {
+    super('Release preflight failed', { checks })
+  }
 }
 
 export class MalformedValue extends ReleaserError {

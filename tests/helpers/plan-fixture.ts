@@ -2,21 +2,22 @@ import { createReleasePlan, type ReleasePlan } from '../../src/domain/release-pl
 import {
   absolutePath,
   branch,
+  changeId,
   digest,
   distTag,
   packageName,
+  planCreatedAt,
   planId,
   repoPath,
   sha,
   tag,
-  timestamp,
   version,
 } from './semantic.js'
 
 export function examplePlan(): ReleasePlan {
   return createReleasePlan({
     id: planId('plan-0001'),
-    createdAt: timestamp('2026-01-01T00:00:00.000Z'),
+    createdAt: planCreatedAt('2026-01-01T00:00:00.000Z'),
     repositoryRoot: absolutePath('/tmp/repo'),
     packageName: packageName('example-package'),
     fingerprint: {
@@ -87,7 +88,7 @@ export function examplePlan(): ReleasePlan {
           category: 'features',
           changes: [
             {
-              id: 'pr-12',
+              id: changeId('pr-12'),
               title: 'something',
               category: 'features',
               author: 'remcostoeten',

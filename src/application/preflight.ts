@@ -1,4 +1,5 @@
 import type { ReleaserConfig } from '../config/schema.js'
+import type { ReplacementPattern } from '../domain/mutations.js'
 import {
   checkBlocked,
   checkPassed,
@@ -31,6 +32,7 @@ export function resolveReleaseBranch(
 export function toolchainChecks(
   gitVersion: string | null,
   npmVersion: string | null,
+  npmPublish = true,
 ): ReleaseCheck[] {
   const gitTitle = 'git executable present'
 
@@ -53,8 +55,8 @@ export function toolchainChecks(
             false,
           )
 
-  const npm =
-    npmVersion === null
+  const npm = npmPublish
+    ? npmVersion === null
       ? checkBlocked(
           'npm-available',
           'npm executable present',
@@ -63,6 +65,7 @@ export function toolchainChecks(
           false,
         )
       : checkPassed('npm-available', 'npm executable present')
+    : checkSkipped('npm-available', 'npm executable present', 'npm publication is disabled')
 
   return [git, npm]
 }
@@ -222,15 +225,17 @@ export function manifestUnreadableCheck(path: string, reason: string): ReleaseCh
   )
 }
 
-export function manifestChecks(isPrivate: boolean): ReleaseCheck[] {
+export function manifestChecks(isPrivate: boolean, npmPublish = true): ReleaseCheck[] {
   const privateCheck = isPrivate
-    ? checkBlocked(
-        'package-not-private',
-        'Package not private',
-        'package.json sets private: true',
-        'Remove "private": true, or disable npm publishing in configuration.',
-        false,
-      )
+    ? npmPublish
+      ? checkBlocked(
+          'package-not-private',
+          'Package not private',
+          'package.json sets private: true',
+          'Remove "private": true, or disable npm publishing in configuration.',
+          false,
+        )
+      : checkSkipped('package-not-private', 'Package not private', 'npm publication is disabled')
     : checkPassed('package-not-private', 'Package not private')
 
   return [checkPassed('manifest-valid', 'package.json readable and valid'), privateCheck]
@@ -252,6 +257,14 @@ export function npmAuthenticationCheck(authentication: NpmAuthentication): Relea
   )
 }
 
+export function npmAuthenticationSkippedCheck(): ReleaseCheck {
+  return checkSkipped(
+    'npm-authenticated',
+    'npm authentication resolves to a user',
+    'npm publication is disabled',
+  )
+}
+
 export function versionNotPublishedCheck(
   packageName: string,
   version: string,
@@ -269,6 +282,14 @@ export function versionNotPublishedCheck(
     `${packageName}@${version} is already on the registry`,
     'Choose a different version.',
     false,
+  )
+}
+
+export function versionNotPublishedSkippedCheck(): ReleaseCheck {
+  return checkSkipped(
+    'version-not-published',
+    'Target version not already published',
+    'npm publication is disabled',
   )
 }
 
@@ -342,13 +363,18 @@ export function githubChecks(
 
 export function replacementMismatchCheck(
   file: string,
+  pattern: ReplacementPattern,
   expectedMatches: number,
   actualMatches: number,
 ): ReleaseCheck {
+  const renderedPattern =
+    pattern.kind === 'literal'
+      ? JSON.stringify(pattern.value)
+      : `/${pattern.source}/${pattern.flags}`
   return checkBlocked(
     'replacements-match',
     'Configured replacements match expectedMatches',
-    `${file} matched ${actualMatches} time(s), expected ${expectedMatches}`,
+    `${file} pattern ${renderedPattern} matched ${actualMatches} time(s), expected ${expectedMatches}`,
     'Fix the replacement pattern or its expectedMatches count.',
     false,
   )

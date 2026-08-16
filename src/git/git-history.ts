@@ -1,6 +1,6 @@
 import type { CommitSummary } from '../domain/changes.js'
 import {
-  Iso8601,
+  CommitAuthoredAt,
   type RepoRelativePath,
   RepoRelativePath as Path,
   type Revision,
@@ -48,7 +48,7 @@ export function parseCommitRecords(output: string): CommitSummary[] {
         subject,
         body: (body ?? '').replace(/\n+$/, ''),
         author,
-        authoredAt: Iso8601.from(authoredAt, context),
+        authoredAt: CommitAuthoredAt.from(authoredAt, context),
         parents:
           parents.length === 0
             ? []

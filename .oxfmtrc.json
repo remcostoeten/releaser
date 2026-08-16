@@ -8,5 +8,5 @@
   "arrowParens": "always",
   "bracketSpacing": true,
   "endOfLine": "lf",
-  "ignorePatterns": ["dist", "coverage", "tests/fixtures", "**/*.md"]
+  "ignorePatterns": ["dist", "coverage", "tests/fixtures", "site", "**/*.md"]
 }

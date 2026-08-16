@@ -33,7 +33,7 @@
     "unicorn/no-null": "off",
     "unicorn/no-process-exit": "off"
   },
-  "ignorePatterns": ["dist", "coverage", "tests/fixtures"],
+  "ignorePatterns": ["dist", "coverage", "tests/fixtures", "site"],
   "overrides": [
     {
       "files": ["src/cli/**", "src/ui/**"],

@@ -4,7 +4,7 @@
   "description": "Safe, resumable npm and GitHub release CLI",
   "license": "MIT",
   "bin": {
-    "releaser": "./dist/cli/index.js"
+    "releaser": "dist/cli/index.js"
   },
   "files": [
     "dist",

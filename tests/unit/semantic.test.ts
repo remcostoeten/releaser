@@ -4,12 +4,17 @@ import {
   AbsolutePath,
   Digest,
   DistTagName,
-  Iso8601,
+  EntityId,
   PackageName,
   RepoRelativePath,
   SemVer,
   Sha,
   TagName,
+  Timestamp,
+} from '../../src/domain/semantic.js'
+import type {
+  EntityId as EntityIdType,
+  Timestamp as TimestampType,
 } from '../../src/domain/semantic.js'
 
 describe('Sha', () => {
@@ -90,12 +95,34 @@ describe('TagName', () => {
   })
 })
 
-describe('Digest and Iso8601', () => {
-  it('accept exactly the shapes they describe', () => {
+describe('Digest', () => {
+  it('accepts exactly the shape it describes', () => {
     expect(Digest.is('0'.repeat(64))).toBe(true)
     expect(Digest.is('0'.repeat(40))).toBe(false)
-    expect(Iso8601.is('2026-01-01T00:00:00.000Z')).toBe(true)
-    expect(Iso8601.is('2024-01-01T00:00:00+00:00')).toBe(true)
-    expect(Iso8601.is('2026-01-01')).toBe(false)
+  })
+})
+
+describe('generic semantic values', () => {
+  it('constructs entity-specific identifiers', () => {
+    const GitHubProviderId = EntityId('GitHubProvider')
+    const id: EntityIdType<'GitHubProvider'> = GitHubProviderId.from(
+      'github-main',
+      'provider configuration',
+    )
+
+    expect(id).toBe('github-main')
+    expect(GitHubProviderId.is('two words')).toBe(false)
+  })
+
+  it('constructs meaning-specific timestamps', () => {
+    const CreatedAt = Timestamp('createdAt')
+    const createdAt: TimestampType<'createdAt'> = CreatedAt.from(
+      '2026-01-01T00:00:00.000Z',
+      'provider configuration',
+    )
+
+    expect(createdAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(CreatedAt.is('2024-01-01T00:00:00+00:00')).toBe(true)
+    expect(CreatedAt.is('2026-01-01')).toBe(false)
   })
 })

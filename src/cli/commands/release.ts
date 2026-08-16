@@ -1,8 +1,9 @@
 import * as prompts from '@clack/prompts'
 import type { Command } from 'commander'
 import { Cancelled, PreflightFailed } from '../../domain/errors.js'
-import type { ReleaseCheck } from '../../domain/checks.js'
-import { renderCheckRows, type CheckRowView } from '../../ui/index.js'
+import { renderPlanReport } from '../../ui/index.js'
+import { planReportView } from '../command-reports.js'
+import { createProgressReporter, renderExecutionResult } from '../execution-output.js'
 import {
   executePlannedRelease,
   planRelease,
@@ -45,7 +46,7 @@ async function runWizard(options: CliOptions): Promise<void> {
   const output = createCliOutputContext(selected)
   const planned = await planRelease(selected)
   if (!output.json) {
-    console.log(renderCheckRows(planned.checks.map(checkView), output.stdout))
+    console.log(renderPlanReport(planReportView(planned), output.stdout))
   }
   const acceptedOverrideCheckIds = await authorizePreflight(planned.checks, {
     yes: selected.yes === true,
@@ -55,20 +56,19 @@ async function runWizard(options: CliOptions): Promise<void> {
   if (planned.kind !== 'planned') {
     throw new PreflightFailed(planned.checks)
   }
-  if (!output.json) {
-    console.log(JSON.stringify(planned, null, 2))
-  }
   if (canPrompt) {
     const confirmed = await prompts.confirm({ message: 'Execute this immutable release plan?' })
     if (prompts.isCancel(confirmed) || !confirmed) {
       throw new Cancelled()
     }
   }
+  const progress = createProgressReporter(output.json, output.stderr)
   const result = await executePlannedRelease(planned.plan, {
     ...selected,
     acceptedOverrideCheckIds,
     yes: selected.yes === true || canPrompt,
     interactive: canPrompt,
+    onExecutionEvent: progress.onEvent,
     requestOtp: async () => {
       const otp = await prompts.password({ message: 'npm one-time password' })
       if (prompts.isCancel(otp)) {
@@ -77,26 +77,11 @@ async function runWizard(options: CliOptions): Promise<void> {
       return otp
     },
   })
-  console.log(output.json ? JSON.stringify(result) : JSON.stringify(result, null, 2))
-}
-
-function checkView(check: ReleaseCheck): CheckRowView {
-  if (check.outcome === 'passed' || check.outcome === 'informed') {
-    return {
-      status: 'passed',
-      title: check.title,
-      ...(check.outcome === 'informed' ? { message: check.message } : {}),
-    }
-  }
-  if (check.outcome === 'skipped') {
-    return { status: 'skipped', title: check.title, message: check.reason }
-  }
-  return {
-    status: check.outcome === 'warned' ? 'warned' : 'blocked',
-    title: check.title,
-    message: check.message,
-    remediation: check.remediation,
-  }
+  console.log(
+    output.json
+      ? JSON.stringify(result)
+      : renderExecutionResult(planned.plan, result, output.stdout),
+  )
 }
 
 async function confirmOverride(message: string): Promise<boolean> {

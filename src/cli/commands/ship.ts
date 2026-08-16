@@ -8,7 +8,13 @@ import {
   UsageError,
 } from '../../domain/errors.js'
 import type { ShipPlan } from '../../domain/ship-plan.js'
-import { renderCheckRows, type CheckRowView } from '../../ui/index.js'
+import {
+  renderCheckRows,
+  renderPlanReport,
+  renderSuccessSummary,
+  type CheckRowView,
+} from '../../ui/index.js'
+import { planReportView } from '../command-reports.js'
 import {
   executePlannedRelease,
   planRelease,
@@ -17,6 +23,7 @@ import {
 import { inspectShip, planShip, prepareShip, type ShipCommandOptions } from '../ship-service.js'
 import { authorizePreflight } from '../preflight-overrides.js'
 import { createCliOutputContext, type CliOutputOptions } from '../output-context.js'
+import { createProgressReporter, renderExecutionResult } from '../execution-output.js'
 
 type CliOptions = ShipCommandOptions & CliOutputOptions
 
@@ -147,7 +154,25 @@ function renderPreparation(
       ? { releasePlan: 'recomputed after the local merge, before release mutations' }
       : {}),
   }
-  console.log(JSON.stringify(value, null, output.json ? 0 : 2))
+  if (output.json) {
+    console.log(JSON.stringify(value))
+    return
+  }
+  console.log(
+    renderSuccessSummary(
+      {
+        title: dryRun ? 'Ship dry run — nothing was written' : 'Feature preparation planned',
+        rows: [
+          { label: 'Source', value: plan.sourceBranch },
+          { label: 'Target', value: plan.targetBranch },
+          { label: 'Changes', value: String(plan.changes.length) },
+          { label: 'Release', value: readiness.plan.version.nextVersion },
+        ],
+        skipped: dryRun ? ['release plan will be recomputed after the local merge'] : [],
+      },
+      output.stdout,
+    ),
+  )
 }
 
 async function executePreparedRelease(
@@ -164,7 +189,9 @@ async function executePreparedRelease(
   const releasePlan = await planRelease(releaseOptions)
   const authorized = await authorizeRelease(releasePlan, options, interactive)
   if (!createCliOutputContext(options).json) {
-    console.log(JSON.stringify(releasePlan, null, 2))
+    console.log(
+      renderPlanReport(planReportView(releasePlan), createCliOutputContext(options).stdout),
+    )
   }
   if (interactive) {
     try {
@@ -178,10 +205,31 @@ async function executePreparedRelease(
       throw error
     }
   }
+  const output = createCliOutputContext(options)
+  const progress = createProgressReporter(output.json, output.stderr)
   const release = await executePlannedRelease(authorized.result.plan, {
     ...releaseOptions,
     acceptedOverrideCheckIds: authorized.acceptedOverrideCheckIds,
+    onExecutionEvent: progress.onEvent,
   })
+  if (!output.json) {
+    console.log(
+      [
+        renderSuccessSummary(
+          {
+            title: 'Feature preparation completed',
+            rows: [
+              { label: 'Target', value: preparation.targetBranch },
+              { label: 'Feature commit', value: preparation.featureCommitSha, state: 'muted' },
+              { label: 'Merge commit', value: preparation.mergeCommitSha, state: 'muted' },
+            ],
+          },
+          output.stdout,
+        ),
+        renderExecutionResult(authorized.result.plan, release, output.stdout),
+      ].join('\n\n'),
+    )
+  }
   return { kind: 'shipped', preparation, release } as const
 }
 
@@ -208,7 +256,9 @@ export async function runShipWizard(initialOptions: CliOptions): Promise<void> {
     )
   }
   const result = await executePreparedRelease(options, shipPlan, interactive)
-  console.log(output.json ? JSON.stringify(result) : JSON.stringify(result, null, 2))
+  if (output.json) {
+    console.log(JSON.stringify(result))
+  }
 }
 
 export function registerShipCommand(program: Command): void {

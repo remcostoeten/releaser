@@ -30,7 +30,7 @@ function repositoryStateRows(state: RepositoryState): KeyValueRow[] {
   const branch = state.head.kind === 'branch' ? state.head.branch : 'detached HEAD'
   const upstream =
     state.head.kind === 'branch' && state.head.upstream.kind === 'tracked'
-      ? `${state.head.upstream.remote}/${state.head.upstream.ref} (${state.head.upstream.ahead} ahead, ${state.head.upstream.behind} behind)`
+      ? `${state.head.upstream.ref} (${state.head.upstream.ahead} ahead, ${state.head.upstream.behind} behind)`
       : 'not configured'
   return [
     { label: 'Root', value: state.root },

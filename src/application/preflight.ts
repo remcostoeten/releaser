@@ -324,8 +324,8 @@ export function githubChecks(
   config: ReleaserConfig,
   tokenStatus: GitHubTokenStatus,
 ): ReleaseCheck[] {
-  const validTitle = 'GitHub token present and valid'
-  const writeTitle = 'GitHub token can write to the repository'
+  const validTitle = 'GitHub authentication'
+  const writeTitle = 'GitHub access can write to the repository'
 
   if (!config.github.release) {
     const reason = 'GitHub releases are disabled'
@@ -340,8 +340,10 @@ export function githubChecks(
       checkBlocked(
         'github-token-valid',
         validTitle,
-        tokenStatus.kind === 'absent' ? 'No GitHub token was found' : tokenStatus.reason,
-        'Set GITHUB_TOKEN, or override to skip the GitHub Release stage.',
+        tokenStatus.kind === 'absent'
+          ? 'No environment token or authenticated GitHub CLI session was found'
+          : tokenStatus.reason,
+        'Run `gh auth login`, set GITHUB_TOKEN or GH_TOKEN, or continue without a GitHub Release.',
         true,
       ),
       checkSkipped('github-token-can-write', writeTitle, 'No usable GitHub token'),

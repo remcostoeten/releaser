@@ -77,5 +77,9 @@ export function createFakeCommandRunner(): FakeCommandRunner {
       }
       return result
     },
+    async readSecret(command, args, options): Promise<string | null> {
+      const result = await run(command, args, options)
+      return result.exitCode === 0 && result.stdout.trim().length > 0 ? result.stdout.trim() : null
+    },
   }
 }

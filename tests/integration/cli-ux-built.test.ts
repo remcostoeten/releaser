@@ -139,7 +139,7 @@ describe('built Node CLI reports', () => {
     expect(plan.exitCode).toBe(0)
     expect(plan.stdout).toContain('0.1.0 -> 0.1.1')
     expect(plan.stdout).toContain('--- a/package.json')
-    expect(plan.stdout).toContain('Planning made no changes.')
+    expect(plan.stdout).toContain('Plan created in read-only mode. No repository changes made.')
     expect(status.stdout).toContain('Package       built-cli-fixture')
     expect(status.stdout).toContain('Version       0.1.0')
     expect(status.stdout).toContain('Upstream      origin/main')

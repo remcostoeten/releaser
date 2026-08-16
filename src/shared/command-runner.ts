@@ -22,6 +22,7 @@ export type CommandResult = {
 export type CommandRunner = {
   run(command: string, args: string[], options?: CommandOptions): Promise<CommandResult>
   runOrThrow(command: string, args: string[], options?: CommandOptions): Promise<CommandResult>
+  readSecret(command: string, args: string[], options?: CommandOptions): Promise<string | null>
 }
 
 export type CommandRunnerOptions = {
@@ -123,6 +124,29 @@ export function createCommandRunner(options: CommandRunnerOptions = {}): Command
         throw new CommandFailed(result.commandLine, result.exitCode, result.stdout, result.stderr)
       }
       return result
+    },
+    async readSecret(command, args, commandOptions = {}): Promise<string | null> {
+      try {
+        const result = await execa(command, args, {
+          ...(commandOptions.cwd === undefined ? {} : { cwd: commandOptions.cwd }),
+          ...(commandOptions.env === undefined ? {} : { env: commandOptions.env }),
+          ...(commandOptions.timeoutMs === undefined ? {} : { timeout: commandOptions.timeoutMs }),
+          ...(commandOptions.input === undefined ? {} : { input: commandOptions.input }),
+          reject: false,
+          stripFinalNewline: false,
+        })
+        if (result.exitCode !== 0 || result.timedOut) {
+          return null
+        }
+        const secret = String(result.stdout ?? '').trim()
+        if (secret.length === 0) {
+          return null
+        }
+        redactor.registerSecret(secret)
+        return secret
+      } catch {
+        return null
+      }
     },
   }
 }

@@ -45,7 +45,7 @@ describe('plan reports', () => {
     expect(output).toContain('--- a/package.json\n+++ b/package.json\n-1.2.3\n+1.3.0-beta.0')
     expect(output).toContain('6. Publish to npm [pending]')
     expect(output).toContain('Features: 1 change')
-    expect(output).toContain('Planning made no changes.')
+    expect(output).toContain('Plan created in read-only mode. No repository changes made.')
     expect(output).not.toMatch(/schemaVersion|statusDigest|offset/u)
     expect(output).not.toContain('\u001B')
   })

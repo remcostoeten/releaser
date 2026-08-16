@@ -32,6 +32,9 @@ describe('preflight override authorization', () => {
     expect(confirmOverride).toHaveBeenCalledTimes(2)
     expect(confirmOverride.mock.calls[0]?.[0]).toContain('Uncommitted files')
     expect(confirmOverride.mock.calls[1]?.[0]).toContain('GitHub Release stage will be skipped')
+    expect(confirmOverride.mock.calls[1]?.[0]).toContain(
+      'Continue without creating a GitHub Release?',
+    )
     for (const check of checks) {
       const prompt = confirmOverride.mock.calls.find((call) => call[0].includes(check.title))?.[0]
       expect(prompt).toContain(check.outcome === 'blocked' ? check.message : '')

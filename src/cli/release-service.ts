@@ -15,7 +15,7 @@ import type { VersionSelection } from '../domain/version.js'
 import { createGitReader } from '../git/git-reader.js'
 import { createGitHubClient } from '../github/github-client.js'
 import { createGitHubReader } from '../github/github-reader.js'
-import { resolveGitHubToken } from '../github/token.js'
+import { resolveGitHubTokenWithGh } from '../github/token.js'
 import { openJournalSession } from '../journal/storage.js'
 import { createNpmClient } from '../npm/npm-client.js'
 import { createPackageReader } from '../npm/package.js'
@@ -91,7 +91,11 @@ async function buildPlan(options: ReleaseCommandOptions): Promise<CreateReleaseP
   const runner = createCommandRunner()
   const git = createGitReader(runner, { cwd: root, remote: config.remote })
   const npm = createNpmClient(runner, root)
-  const github = createGitHubReader({ readRemoteRepository: git.readRemoteRepository })
+  const githubToken = config.github.release ? await resolveGitHubTokenWithGh(runner) : null
+  const github = createGitHubReader(
+    { readRemoteRepository: git.readRemoteRepository },
+    { token: githubToken },
+  )
   return createReleasePlan(
     {
       toolchain: {
@@ -223,7 +227,7 @@ export async function executePlannedRelease(plan: ReleasePlan, options: ReleaseC
     remote: plan.pushBranch.remote,
   })
   const npm = createNpmClient(runner, plan.repositoryRoot)
-  const token = resolveGitHubToken()
+  const token = plan.githubRelease.kind === 'create' ? await resolveGitHubTokenWithGh(runner) : null
   const github =
     plan.githubRelease.kind === 'create'
       ? token === null
@@ -259,7 +263,8 @@ export async function resumeReleaseFromCli(options: ReleaseCommandOptions) {
       remote: stored.plan.pushBranch.remote,
     })
     const npm = createNpmClient(runner, stored.plan.repositoryRoot)
-    const token = resolveGitHubToken()
+    const token =
+      stored.plan.githubRelease.kind === 'create' ? await resolveGitHubTokenWithGh(runner) : null
     if (stored.plan.githubRelease.kind === 'create' && token === null) {
       throw new GitHubAuthFailed('missing')
     }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createGitHubReader } from '../../src/github/github-reader.js'
-import { resolveGitHubToken } from '../../src/github/token.js'
+import { resolveGitHubToken, resolveGitHubTokenWithGh } from '../../src/github/token.js'
+import { createFakeCommandRunner } from '../helpers/fake-command-runner.js'
 
 function repositoryReader(host = 'github.com') {
   return {
@@ -20,6 +21,33 @@ describe('GitHub token resolution', () => {
       value: 'gh-token',
       source: 'GH_TOKEN',
     })
+  })
+
+  it('uses an authenticated GitHub CLI session when environment tokens are absent', async () => {
+    const runner = createFakeCommandRunner()
+    runner.stub('gh auth token', { stdout: 'cli-token\n' })
+
+    await expect(resolveGitHubTokenWithGh(runner, {})).resolves.toEqual({
+      value: 'cli-token',
+      source: 'gh',
+    })
+    expect(runner.commandLines()).toEqual(['gh auth token'])
+  })
+
+  it('does not invoke GitHub CLI when an environment token exists', async () => {
+    const runner = createFakeCommandRunner()
+
+    await expect(
+      resolveGitHubTokenWithGh(runner, { GH_TOKEN: 'environment-token' }),
+    ).resolves.toEqual({ value: 'environment-token', source: 'GH_TOKEN' })
+    expect(runner.calls).toEqual([])
+  })
+
+  it('returns absent when GitHub CLI has no authenticated session', async () => {
+    const runner = createFakeCommandRunner()
+    runner.stub('gh auth token', { exitCode: 1, stderr: 'not logged in' })
+
+    await expect(resolveGitHubTokenWithGh(runner, {})).resolves.toBeNull()
   })
 
   it('reports an absent token without making an API call', async () => {

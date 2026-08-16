@@ -1,3 +1,4 @@
+import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { MergeConflict } from '../../src/domain/errors.js'
 import { planShip, prepareShip } from '../../src/cli/ship-service.js'
@@ -44,6 +45,28 @@ describe('ship preparation', () => {
       await repo.git(['log', '-1', '--format=%P']).then((parents) => parents.split(' ')),
     ).toHaveLength(2)
     expect(await repo.git(['ls-remote', 'origin', 'refs/heads/master'])).toContain(remoteBefore)
+  })
+
+  it('fast-forwards a target that is behind an unfetched remote commit', async () => {
+    const repo = await repository()
+    const clonePath = join(dirname(repo.originPath!), 'other-clone')
+    await repo.git(['clone', repo.originPath!, clonePath], dirname(clonePath))
+    await repo.write('../other-clone/src/remote.txt', 'remote work\n')
+    await repo.git(['add', '.'], clonePath)
+    await repo.git(['commit', '--message', 'remote change'], clonePath)
+    await repo.git(['push', 'origin', 'master'], clonePath)
+    await repo.git(['checkout', '-b', 'feature'])
+    await repo.commit('feature change', { 'src/feature.ts': 'export const shipped = true\n' })
+
+    const plan = await planShip({ cwd: repo.root, target: 'master' })
+    expect(plan.targetState).toBe('behind')
+
+    const result = await prepareShip(plan)
+
+    expect(result.targetBranch).toBe('master')
+    expect(await repo.git(['branch', '--show-current'])).toBe('master')
+    await repo.git(['cat-file', '-e', 'HEAD:src/remote.txt'])
+    await repo.git(['cat-file', '-e', 'HEAD:src/feature.ts'])
   })
 
   it('aborts a conflicting merge and returns to the feature branch', async () => {

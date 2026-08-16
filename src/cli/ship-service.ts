@@ -130,6 +130,11 @@ export async function planShip(options: ShipCommandOptions): Promise<ShipPlan> {
     commitMessage: options.message?.trim() || null,
     mergeMessage: options.mergeMessage?.trim() || null,
   }
+  // classifyTarget compares against the live remote SHA with the local object
+  // store; without the objects a merely-behind target reads as diverged.
+  if (options.dryRun !== true) {
+    await fetchTargetBranch(git.command, context.remote, context.targetBranch)
+  }
   return createShipPlan(
     {
       async readRepository() {

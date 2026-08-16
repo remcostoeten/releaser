@@ -72,7 +72,8 @@ export class BranchDiverged extends ReleaserError {
 
 export class ShipTargetDiverged extends ReleaserError {
   readonly kind = 'ShipTargetDiverged'
-  readonly remediation = 'Reconcile the local and remote target branch before shipping.'
+  readonly remediation =
+    'Fetch the target branch, then reconcile the local and remote target branch before shipping.'
 
   constructor(branch: string) {
     super(`Local and remote ${branch} have diverged`, { branch })

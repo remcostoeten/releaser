@@ -201,6 +201,7 @@ key must never silently disable a safety check.
   "releaseBranch": null,
   "remote": "origin",
   "versionFile": "package.json",
+  "versionPattern": null,
   "tagPrefix": "v",
   "commitMessage": "chore(release): {{version}}",
   "npm": { "publish": true, "access": "public", "tag": null },
@@ -226,6 +227,26 @@ availability, authentication, registry, pack, or publish checks. Explicit,
 match-count-checked replacements can synchronize Cargo, Tauri, and nested
 package versions. See the [Skriuw](examples/skriuw.releaser.config.json) and
 [Dora](examples/dora.releaser.config.json) examples.
+
+When the version does not live in JSON at all — a PKGBUILD, a Makefile, a
+`configure.ac` — set `versionPattern` and the `versionFile` is read as text.
+The version is the pattern's first capture group, and only that capture group's
+bytes are rewritten:
+
+```json
+{
+  "versionFile": "packaging/pkgbuild/PKGBUILD",
+  "versionPattern": { "pattern": "^pkgver=(.+)$", "flags": "m" },
+  "npm": { "publish": false }
+}
+```
+
+The pattern must match exactly once. Zero matches and two matches are both
+planning failures, for the same reason a replacement declares `expectedMatches`:
+a version source with two authorities is how a release tool corrupts a
+repository. Such a repository needs no `package.json` — with none present the
+release has no package name and is identified by version alone. See the
+[Remcorder](examples/remcorder.releaser.config.json) example.
 
 When CI owns artifact builds and creates the draft GitHub Release itself,
 `releaser finalize` closes the last mile: it polls the workflow runs

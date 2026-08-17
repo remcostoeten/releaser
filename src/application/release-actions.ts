@@ -37,6 +37,10 @@ export function buildNpmPublishAction(
     return { kind: 'skipped', reason: 'package.json marks the package as private' }
   }
 
+  if (manifest.name === null) {
+    return { kind: 'skipped', reason: 'the repository has no package.json name to publish' }
+  }
+
   return {
     kind: 'publish',
     packageName: manifest.name,

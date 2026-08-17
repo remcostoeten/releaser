@@ -133,9 +133,11 @@ export async function createReleasePlan(
   const manifest = manifestLookup.manifest
   checks.push(...manifestChecks(manifest.private, config.npm.publish))
 
-  const published = config.npm.publish
-    ? await deps.registry.readPublishedVersions(manifest.name)
-    : { kind: 'never-published' as const }
+  const publishName = config.npm.publish ? manifest.name : null
+  const published =
+    publishName === null
+      ? { kind: 'never-published' as const }
+      : await deps.registry.readPublishedVersions(publishName)
   const publishedVersions = published.kind === 'published' ? published.versions : []
   if (config.npm.publish) {
     const authentication = await deps.registry.readAuthentication()
@@ -152,9 +154,9 @@ export async function createReleasePlan(
   })
 
   checks.push(
-    config.npm.publish
-      ? versionNotPublishedCheck(manifest.name, version.nextVersion, publishedVersions)
-      : versionNotPublishedSkippedCheck(),
+    publishName === null
+      ? versionNotPublishedSkippedCheck()
+      : versionNotPublishedCheck(publishName, version.nextVersion, publishedVersions),
   )
 
   const tagName = TagName.from(

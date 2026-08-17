@@ -83,6 +83,7 @@ file.
 | Reading + validating `package.json` manifest | `npm/package.ts` | `versioning/` |
 | Writing the version field into `package.json` | `versioning/package-json.ts` | `npm/` |
 | Writing the version into lockfiles | `versioning/package-lock.ts` | `npm/` |
+| Reading + writing a non-JSON version source | `versioning/version-pattern.ts` | `npm/` |
 | Arbitrary-file version occurrences | `versioning/scanner.ts` | `notes/` |
 | Configured find/replace rules | `versioning/replacements.ts` | `versioning/scanner.ts` |
 | Release-notes *types* | `domain/release-notes.ts` | `notes/` |
@@ -139,7 +140,7 @@ where marked *overridable*.
 | On the configured release branch | warning | yes |
 | Target tag does not already exist (local or remote) | blocking | no |
 | Target version not already published | blocking | no |
-| `package.json` readable and valid | blocking | no |
+| Version source readable and valid | blocking | no |
 | Package not `private: true`, when publishing to npm | blocking | no |
 | npm authentication resolves to a user, when publishing to npm | blocking | no |
 | GitHub token present and valid | blocking | yes (skips GitHub Release stage) |
@@ -346,6 +347,28 @@ re-serialize the whole object with `JSON.stringify`, and never rewrite it with
 a regex over the raw text. A non-`package.json` version source is allowed only
 when npm publication is disabled.
 
+A repository whose release version does not live in JSON at all — a PKGBUILD,
+a Makefile, a `configure.ac` — sets `versionPattern`. The `versionFile` is then
+read as text and its version is the pattern's **first capture group**. Only that
+capture group's byte range is replaced; the rest of the file, including the
+matched line around it, is preserved exactly.
+
+`versionPattern` obeys the same anti-corruption rule as §9.2, tightened: the
+pattern must match **exactly once**. Zero matches and two matches are both
+planning failures, because a version source that appears twice has no single
+authority. The pattern must declare at least one capture group, and must be a
+valid regular expression; both are validated at config load, not at mutation
+time.
+
+`versionPattern` requires `npm.publish: false`. npm's manifest version is a JSON
+field by definition, so a pattern-sourced version and npm publication are
+mutually exclusive.
+
+A repository using `versionPattern` need not contain a `package.json` at all.
+When none exists the release has no package name: `ReleasePlan.packageName` is
+`null`, the npm publication stage is skipped, and output identifies the release
+by version alone.
+
 Lockfiles are synchronized where the format records the package's own version:
 `package-lock.json` (`version`, `packages[""].version`). `pnpm-lock.yaml` and
 `bun.lock` do not record the root version and are left untouched.
@@ -396,6 +419,7 @@ pins it.
   "releaseBranch": null,
   "remote": "origin",
   "versionFile": "package.json",
+  "versionPattern": null,
   "tagPrefix": "v",
   "commitMessage": "chore(release): {{version}}",
   "tagMessage": "{{version}}",

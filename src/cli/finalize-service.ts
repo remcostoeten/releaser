@@ -7,6 +7,11 @@ import { createGitReader } from '../git/git-reader.js'
 import { createGitHubClient } from '../github/github-client.js'
 import { resolveGitHubTokenWithGh } from '../github/token.js'
 import { createCommandRunner } from '../shared/command-runner.js'
+import {
+  describeVersionMatchFailure,
+  matchVersion,
+  type VersionPatternConfig,
+} from '../versioning/version-pattern.js'
 
 export type FinalizeCommandOptions = {
   cwd?: string
@@ -27,8 +32,23 @@ function positiveInteger(value: string | undefined, fallback: number, flag: stri
   return parsed
 }
 
-async function readReleaseVersion(root: string, versionFile: string): Promise<string> {
+async function readReleaseVersion(
+  root: string,
+  versionFile: string,
+  versionPattern: VersionPatternConfig | null,
+): Promise<string> {
   const content = await readFile(join(root, versionFile), 'utf8')
+
+  if (versionPattern !== null) {
+    const match = matchVersion(content, versionPattern)
+    if (match.kind !== 'found') {
+      throw new UsageError(
+        `${describeVersionMatchFailure(match, versionFile, versionPattern)}; pass the tag explicitly.`,
+      )
+    }
+    return match.value
+  }
+
   const parsed: unknown = JSON.parse(content)
   const version =
     typeof parsed === 'object' && parsed !== null
@@ -59,7 +79,8 @@ export async function finalizeReleaseFromCli(
   const config = await loadConfig(root)
   const git = createGitReader(runner, { cwd: root, remote: config.remote })
   const tag =
-    options.tag ?? `${config.tagPrefix}${await readReleaseVersion(root, config.versionFile)}`
+    options.tag ??
+    `${config.tagPrefix}${await readReleaseVersion(root, config.versionFile, config.versionPattern)}`
   const remote = await git.readRemoteRepository()
   if (remote === null) {
     throw new UsageError(`Remote ${config.remote} is not a recognizable GitHub repository.`)

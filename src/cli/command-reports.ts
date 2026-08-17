@@ -136,7 +136,7 @@ function planSummary(plan: ReleasePlan): KeyValueRow[] {
       ? plan.pushBranch.target.branch
       : plan.pushBranch.target.tag
   return [
-    { label: 'Package', value: plan.packageName },
+    ...(plan.packageName === null ? [] : [{ label: 'Package', value: plan.packageName }]),
     {
       label: 'Version',
       value: `${plan.version.previousVersion} -> ${plan.version.nextVersion}`,

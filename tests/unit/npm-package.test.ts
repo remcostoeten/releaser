@@ -59,12 +59,41 @@ describe('npm package discovery', () => {
     await mkdir(join(root, 'app'))
     await writeFile(join(root, 'app', 'tauri.conf.json'), '{"version":"2.4.0"}')
 
-    const lookup = await createPackageReader(root, 'app/tauri.conf.json').read()
+    const lookup = await createPackageReader(root, { versionFile: 'app/tauri.conf.json' }).read()
 
     expect(lookup).toMatchObject({
       kind: 'found',
       manifest: { name: 'desktop-app', version: '2.4.0', private: true },
     })
+  })
+
+  it('reads a release version by pattern from a repository without a package.json', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'releaser-npm-package-'))
+    directories.push(root)
+    await writeFile(join(root, 'PKGBUILD'), 'pkgname=remcorder\npkgver=0.0.5\npkgrel=1\n')
+
+    const lookup = await createPackageReader(root, {
+      versionFile: 'PKGBUILD',
+      versionPattern: { pattern: '^pkgver=(.+)$', flags: 'm' },
+    }).read()
+
+    expect(lookup).toMatchObject({
+      kind: 'found',
+      manifest: { name: null, version: '0.0.5', private: false },
+    })
+  })
+
+  it('reports an ambiguous version pattern as unreadable', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'releaser-npm-package-'))
+    directories.push(root)
+    await writeFile(join(root, 'PKGBUILD'), 'pkgver=0.0.5\npkgver=0.0.6\n')
+
+    const lookup = await createPackageReader(root, {
+      versionFile: 'PKGBUILD',
+      versionPattern: { pattern: '^pkgver=(.+)$', flags: 'm' },
+    }).read()
+
+    expect(lookup).toMatchObject({ kind: 'unreadable' })
   })
 })
 

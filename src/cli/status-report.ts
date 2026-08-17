@@ -54,7 +54,7 @@ function packageRows(status: HumanStatusResult): KeyValueRow[] {
   }
   const manifest = status.manifest.manifest
   return [
-    { label: 'Package', value: manifest.name },
+    ...(manifest.name === null ? [] : [{ label: 'Package', value: manifest.name }]),
     { label: 'Version', value: manifest.version },
     registryRow(status.registry, manifest.version),
   ]

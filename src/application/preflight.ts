@@ -215,12 +215,16 @@ export function repositoryChecks(config: ReleaserConfig, state: RepositoryState)
   ]
 }
 
-export function manifestUnreadableCheck(path: string, reason: string): ReleaseCheck {
+export function manifestUnreadableCheck(
+  path: string,
+  reason: string,
+  remediation = 'Fix the configured version file before releasing.',
+): ReleaseCheck {
   return checkBlocked(
     'manifest-valid',
     'Version source readable and valid',
     `${path}: ${reason}`,
-    'Fix the configured version file before releasing.',
+    remediation,
     false,
   )
 }

@@ -58,6 +58,7 @@ releaser --bump patch --dry-run
 
 ```bash
 releaser          # interactive wizard
+releaser init     # generate releaser.config.json for a non-npm project
 releaser plan     # build and show a plan, execute nothing
 releaser status   # repo, registry, and release state
 releaser doctor   # run preflight checks
@@ -247,6 +248,11 @@ a version source with two authorities is how a release tool corrupts a
 repository. Such a repository needs no `package.json` — with none present the
 release has no package name and is identified by version alone. See the
 [Remcorder](examples/remcorder.releaser.config.json) example.
+
+Run `releaser init` to generate this file automatically. It detects Cargo,
+Python (PEP 621 or Poetry), CMake, and PKGBUILD projects and writes a matching
+`versionFile`/`versionPattern`; if nothing is recognized it creates a plain
+`VERSION` file and points the config at that instead.
 
 When CI owns artifact builds and creates the draft GitHub Release itself,
 `releaser finalize` closes the last mile: it polls the workflow runs

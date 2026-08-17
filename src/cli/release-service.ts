@@ -58,7 +58,7 @@ function versionSelection(options: ReleaseCommandOptions): VersionSelection {
   throw new UsageError('Provide --bump <patch|minor|major|prerelease> or --version <semver>.')
 }
 
-async function repositoryRoot(cwd: string | undefined): Promise<string> {
+export async function repositoryRoot(cwd: string | undefined): Promise<string> {
   const candidate = await resolveWorkingDirectory(cwd)
   const runner = createCommandRunner()
   const location = await createGitReader(runner, { cwd: candidate, remote: 'origin' }).locate()

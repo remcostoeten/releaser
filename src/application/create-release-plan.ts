@@ -78,6 +78,22 @@ function pushBranchName(config: ReleaserConfig, state: RepositoryState): BranchN
   return resolveReleaseBranch(config, state) ?? DETACHED_PUSH_TARGET
 }
 
+function versionSourceRemediation(config: ReleaserConfig, reason: string): string {
+  const looksLikeDefaultSetup =
+    config.versionFile === 'package.json' && config.versionPattern === null
+  const looksLikeMissingFile = reason.includes('ENOENT')
+
+  if (looksLikeDefaultSetup && looksLikeMissingFile) {
+    return (
+      'No package.json and no releaser.config.json found. Run `releaser init` to generate a ' +
+      'releaser.config.json for this project, or create one by hand with a custom versionFile ' +
+      '(and versionPattern for non-JSON sources).'
+    )
+  }
+
+  return 'Fix the configured version file before releasing.'
+}
+
 function templateValuesFor(version: ReleaseVersion): {
   version: string
   previousVersion: string
@@ -126,7 +142,13 @@ export async function createReleasePlan(
   const manifestLookup = await deps.manifest.read()
 
   if (manifestLookup.kind === 'unreadable') {
-    checks.push(manifestUnreadableCheck(manifestLookup.path, manifestLookup.reason))
+    checks.push(
+      manifestUnreadableCheck(
+        manifestLookup.path,
+        manifestLookup.reason,
+        versionSourceRemediation(config, manifestLookup.reason),
+      ),
+    )
     return { kind: 'not-planned', checks }
   }
 

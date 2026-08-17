@@ -3,6 +3,7 @@ import { UsageError } from '../domain/errors.js'
 import { registerCompletionCommand } from './commands/completion.js'
 import { registerDoctorCommand } from './commands/doctor.js'
 import { registerFinalizeCommand } from './commands/finalize.js'
+import { registerInitCommand } from './commands/init.js'
 import { registerPlanCommand } from './commands/plan.js'
 import { registerReleaseCommand } from './commands/release.js'
 import { registerResumeCommand } from './commands/resume.js'
@@ -41,17 +42,19 @@ export function createProgram(version: string): Command {
       [
         '',
         'Examples:',
-        '  releaser --bump patch                 Plan, confirm, and release',
-        '  releaser plan --bump minor            Preview without executing',
-        '  releaser --bump patch --dry-run       Exercise checks with zero writes',
-        '  releaser ship --bump patch            Commit, merge, and release',
-        '  releaser resume                       Continue an interrupted release',
-        '  releaser status --json | jq .         Keep stdout machine-readable',
-        '  eval "$(releaser completion zsh)"     Enable zsh completion',
+        '  releaser init                       Generate config for a non-npm project',
+        '  releaser --bump patch               Plan, confirm, and release',
+        '  releaser plan --bump minor          Preview without executing',
+        '  releaser --bump patch --dry-run     Exercise checks with zero writes',
+        '  releaser ship --bump patch          Commit, merge, and release',
+        '  releaser resume                     Continue an interrupted release',
+        '  releaser status --json | jq .       Keep stdout machine-readable',
+        '  eval "$(releaser completion zsh)"   Enable zsh completion',
       ].join('\n'),
     )
 
   registerReleaseCommand(program)
+  registerInitCommand(program)
   registerPlanCommand(program)
   registerStatusCommand(program)
   registerDoctorCommand(program)

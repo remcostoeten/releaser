@@ -1,0 +1,22 @@
+{
+  "releaseBranch": "daddy",
+  "remote": "origin",
+  "versionFile": "packaging/pkgbuild/PKGBUILD",
+  "versionPattern": { "pattern": "^pkgver=(.+)$", "flags": "m" },
+  "tagPrefix": "v",
+  "commitMessage": "chore(release): v{{version}}",
+  "tagMessage": "{{version}}",
+  "npm": { "publish": false, "access": "public", "tag": null },
+  "github": { "release": false, "draft": false },
+  "replacements": [
+    {
+      "file": "CMakeLists.txt",
+      "find": {
+        "pattern": "project\\(Remcorder VERSION [0-9]+\\.[0-9]+\\.[0-9]+",
+        "flags": "g"
+      },
+      "replace": "project(Remcorder VERSION {{version}}",
+      "expectedMatches": 1
+    }
+  ]
+}

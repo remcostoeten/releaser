@@ -18,7 +18,7 @@ export type NpmPublishConfig = Readonly<{
 }>
 
 export type NpmPackageManifest = Readonly<{
-  name: PackageName
+  name: PackageName | null
   version: SemVer
   private: boolean
   publishConfig: NpmPublishConfig | null

@@ -19,7 +19,7 @@ export async function readHumanReleaseStatus(options: {
   const npm = createNpmClient(runner, root)
   const [repository, manifest] = await Promise.all([
     git.readState(),
-    createPackageReader(root, config.versionFile).read(),
+    createPackageReader(root, config).read(),
   ])
   const registry = await readHumanRegistryStatus(config.npm.publish, manifest, npm)
   const tagName =
@@ -48,8 +48,12 @@ async function readHumanRegistryStatus(
   if (manifest.kind !== 'found') {
     return { kind: 'unavailable', reason: 'package manifest is unreadable' }
   }
+  const packageName = manifest.manifest.name
+  if (packageName === null) {
+    return { kind: 'unavailable', reason: 'the repository has no package.json name' }
+  }
   try {
-    return await npm.readPublishedVersions(manifest.manifest.name)
+    return await npm.readPublishedVersions(packageName)
   } catch {
     return { kind: 'unavailable', reason: 'npm registry could not be reached or authenticated' }
   }

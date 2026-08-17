@@ -3,7 +3,7 @@ import type {
   ExecuteReleasePlanResult,
   ExecutionEvent,
 } from '../application/execute-release-plan.js'
-import { planStages, type ReleasePlan } from '../domain/release-plan.js'
+import { planStages, releaseLabel, type ReleasePlan } from '../domain/release-plan.js'
 import { STAGE_ORDER, type StageName } from '../domain/stages.js'
 import type {
   DryRunSummaryView,
@@ -126,7 +126,9 @@ export function releaseSummaryView(
       ? plan.pushBranch.target.branch
       : plan.pushBranch.target.tag
   const rows: KeyValueRow[] = [
-    { label: 'Package', value: `${plan.packageName}@${plan.version.nextVersion}` },
+    plan.packageName === null
+      ? { label: 'Version', value: plan.version.nextVersion }
+      : { label: 'Package', value: `${plan.packageName}@${plan.version.nextVersion}` },
     { label: 'Tag', value: plan.tag.name },
     { label: 'Branch', value: branch },
   ]
@@ -149,7 +151,7 @@ export function releaseSummaryView(
     rows.push({ label: 'Resume', value: `${verified} verified, ${completed} newly completed` })
   }
   return {
-    title: `${resumed ? 'Resumed release' : 'Released'} ${plan.packageName}@${plan.version.nextVersion}`,
+    title: `${resumed ? 'Resumed release' : 'Released'} ${releaseLabel(plan)}`,
     rows,
     skipped: result.stages
       .filter((stage) => stage.outcome === 'skipped')

@@ -19,7 +19,7 @@ export type ReleasePlan = Readonly<{
   id: PlanId
   createdAt: ReleasePlanCreatedAt
   repositoryRoot: AbsolutePath
-  packageName: PackageName
+  packageName: PackageName | null
   fingerprint: RepositoryFingerprint
   boundary: ReleaseBoundary
   version: ReleaseVersion
@@ -83,4 +83,14 @@ export function planStageActions(plan: ReleasePlan): StageAction[] {
 
 export function planStages(plan: ReleasePlan): StageName[] {
   return planStageActions(plan).map((action) => action.stage)
+}
+
+/**
+ * Human label for a release. Repositories without an npm manifest have no
+ * package name, so they are identified by version alone.
+ */
+export function releaseLabel(plan: ReleasePlan): string {
+  return plan.packageName === null
+    ? plan.version.nextVersion
+    : `${plan.packageName}@${plan.version.nextVersion}`
 }

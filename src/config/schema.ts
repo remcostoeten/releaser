@@ -16,11 +16,26 @@ export const replacementSchema = z.strictObject({
   expectedMatches: z.number().int().positive(),
 })
 
+export const versionPatternSchema = z.strictObject({
+  pattern: z.string().min(1),
+  flags: z.string().default('m'),
+})
+
+function captureGroupCount(pattern: string, flags: string): number | null {
+  try {
+    const match = new RegExp(`${pattern}|`, flags).exec('')
+    return match === null ? null : match.length - 1
+  } catch {
+    return null
+  }
+}
+
 export const releaserConfigSchema = z
   .strictObject({
     releaseBranch: z.string().min(1).nullable().default(null),
     remote: z.string().min(1).default('origin'),
     versionFile: z.string().min(1).default('package.json'),
+    versionPattern: versionPatternSchema.nullable().default(null),
     tagPrefix: z.string().default('v'),
     commitMessage: z.string().min(1).default('chore(release): {{version}}'),
     tagMessage: z.string().min(1).default('{{version}}'),
@@ -47,10 +62,43 @@ export const releaserConfigSchema = z
         message: 'must be package.json when npm publication is enabled',
       })
     }
+
+    if (config.versionPattern === null) {
+      return
+    }
+
+    if (config.npm.publish) {
+      context.addIssue({
+        code: 'custom',
+        path: ['versionPattern'],
+        message: 'must be null when npm publication is enabled',
+      })
+      return
+    }
+
+    const groups = captureGroupCount(config.versionPattern.pattern, config.versionPattern.flags)
+
+    if (groups === null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['versionPattern', 'pattern'],
+        message: 'is not a valid regular expression',
+      })
+      return
+    }
+
+    if (groups < 1) {
+      context.addIssue({
+        code: 'custom',
+        path: ['versionPattern', 'pattern'],
+        message: 'must contain a capture group surrounding the version',
+      })
+    }
   })
 
 export type ReplacementPatternConfig = z.infer<typeof replacementPatternSchema>
 export type ReplacementConfig = z.infer<typeof replacementSchema>
+export type VersionPatternConfig = z.infer<typeof versionPatternSchema>
 export type ReleaserConfig = z.infer<typeof releaserConfigSchema>
 
 export const defaultConfig: ReleaserConfig = releaserConfigSchema.parse({})

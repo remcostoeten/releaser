@@ -6,6 +6,7 @@ import { RepoRelativePath } from '../domain/semantic.js'
 import type { MutationPlanner } from '../application/ports.js'
 import { planPackageJsonVersion } from './package-json.js'
 import { planPackageLockVersion } from './package-lock.js'
+import { planPatternVersion } from './version-pattern.js'
 import { planReplacement } from './replacements.js'
 
 function isMissingFile(error: unknown): boolean {
@@ -35,11 +36,15 @@ function readReplacementSources(root: string, config: ReleaserConfig) {
 async function planVersionMutation(
   root: string,
   versionFile: RepoRelativePath,
+  config: ReleaserConfig,
   previousVersion: Parameters<typeof planPackageJsonVersion>[1],
   nextVersion: Parameters<typeof planPackageJsonVersion>[2],
 ): Promise<FileMutation> {
   const source = await readFile(join(root, versionFile), 'utf8')
-  return planPackageJsonVersion(source, previousVersion, nextVersion, versionFile)
+
+  return config.versionPattern === null
+    ? planPackageJsonVersion(source, previousVersion, nextVersion, versionFile)
+    : planPatternVersion(source, previousVersion, nextVersion, versionFile, config.versionPattern)
 }
 
 export function createMutationPlanner(cwd: string, config: ReleaserConfig): MutationPlanner {
@@ -49,7 +54,13 @@ export function createMutationPlanner(cwd: string, config: ReleaserConfig): Muta
   return {
     async planMutations(request) {
       const mutations: FileMutation[] = [
-        await planVersionMutation(root, versionFile, request.previousVersion, request.nextVersion),
+        await planVersionMutation(
+          root,
+          versionFile,
+          config,
+          request.previousVersion,
+          request.nextVersion,
+        ),
       ]
       const packageLock = await readOptional(join(root, 'package-lock.json'))
 

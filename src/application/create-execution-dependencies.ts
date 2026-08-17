@@ -7,6 +7,7 @@ import {
   StalePlan,
   VersionAlreadyPublished,
 } from '../domain/errors.js'
+import type { VersionPatternConfig } from '../config/schema.js'
 import { applyEdits, editsApplyTo, type TextEdit } from '../domain/mutations.js'
 import type { ReleasePlan } from '../domain/release-plan.js'
 import type { RepoRelativePath, Sha } from '../domain/semantic.js'
@@ -34,6 +35,7 @@ export type ExecutionInfrastructure = {
   git: GitReader
   npm: NpmClient
   github: GitHubClient | null
+  versionPattern?: VersionPatternConfig | null
   journal?: JournalStorageOptions
 }
 
@@ -238,19 +240,20 @@ function createPublishStage(npm: NpmClient): PublishStage {
     if (plan.npmPublish.kind !== 'publish') {
       return { kind: 'complete', details: { reason: plan.npmPublish.reason } }
     }
-    if (!(await npm.versionExists(plan.packageName, plan.version.nextVersion))) {
+    const packageName = plan.npmPublish.packageName
+    if (!(await npm.versionExists(packageName, plan.version.nextVersion))) {
       return { kind: 'pending' }
     }
     const [publishedShasum, local] = await Promise.all([
-      npm.readVersionShasum(plan.packageName, plan.version.nextVersion),
+      npm.readVersionShasum(packageName, plan.version.nextVersion),
       npm.packDryRun(),
     ])
     if (publishedShasum === null) {
-      throw new VersionAlreadyPublished(`${plan.packageName}@${plan.version.nextVersion}`)
+      throw new VersionAlreadyPublished(`${packageName}@${plan.version.nextVersion}`)
     }
     if (publishedShasum !== local.shasum) {
       throw new PublishedPackageMismatch(
-        `${plan.packageName}@${plan.version.nextVersion}`,
+        `${packageName}@${plan.version.nextVersion}`,
         local.shasum,
         publishedShasum,
       )
@@ -333,10 +336,10 @@ export function createExecutionDependencies(
       const versionFile = plan.fileMutations.find(
         (mutation) => mutation.kind === 'manifest-version',
       )?.path
-      const manifest = await createPackageReader(
-        plan.repositoryRoot,
-        versionFile ?? 'package.json',
-      ).read()
+      const manifest = await createPackageReader(plan.repositoryRoot, {
+        versionFile: versionFile ?? 'package.json',
+        versionPattern: infrastructure.versionPattern ?? null,
+      }).read()
       if (manifest.kind !== 'found') {
         throw new StalePlan('manifestVersion', plan.fingerprint.manifestVersion, 'unreadable')
       }

@@ -205,7 +205,7 @@ export const releasePlanSchema = z
     id: semantic(PlanId),
     createdAt: semantic(ReleasePlanCreatedAt),
     repositoryRoot: semantic(AbsolutePath),
-    packageName: semantic(PackageName),
+    packageName: semantic(PackageName).nullable(),
     fingerprint: repositoryFingerprintSchema,
     boundary: releaseBoundarySchema,
     version: releaseVersionSchema,

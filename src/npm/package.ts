@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { z } from 'zod'
+import type { VersionPatternConfig } from '../config/schema.js'
 import { PackagePrivate } from '../domain/errors.js'
 import {
   AbsolutePath,
@@ -9,6 +10,7 @@ import {
   RepoRelativePath,
   SemVer,
 } from '../domain/semantic.js'
+import { describeVersionMatchFailure, matchVersion } from '../versioning/version-pattern.js'
 import type { NpmManifestLookup, NpmPackageManifest } from './types.js'
 
 const publishConfigSchema = z
@@ -28,20 +30,26 @@ const packageSchema = z.object({
   files: z.array(z.string()).optional(),
 })
 
+const anonymousPackage = {
+  name: null,
+  private: false,
+  publishConfig: null,
+  files: null,
+} as const
+
 function validationReason(error: z.ZodError): string {
   return error.issues
     .map((issue) => `${issue.path.join('.') || 'package.json'}: ${issue.message}`)
     .join('; ')
 }
 
-function parseManifest(value: unknown, versionValue: unknown, root: string): NpmPackageManifest {
+type PackageIdentity = Pick<NpmPackageManifest, 'name' | 'private' | 'publishConfig' | 'files'>
+
+function parsePackageIdentity(value: unknown): PackageIdentity {
   const parsed = packageSchema.safeParse(value)
 
   if (!parsed.success) {
     throw new Error(validationReason(parsed.error))
-  }
-  if (typeof versionValue !== 'string') {
-    throw new TypeError('release version: expected a string')
   }
 
   const publishConfig = parsed.data.publishConfig
@@ -54,7 +62,6 @@ function parseManifest(value: unknown, versionValue: unknown, root: string): Npm
 
   return {
     name: PackageName.from(parsed.data.name, 'package.json name'),
-    version: SemVer.from(versionValue, 'release version'),
     private: parsed.data.private ?? false,
     publishConfig:
       publishConfig === undefined
@@ -66,7 +73,6 @@ function parseManifest(value: unknown, versionValue: unknown, root: string): Npm
             provenance: publishConfig.provenance ?? null,
           },
     files: parsed.data.files ?? null,
-    root: AbsolutePath.from(root, 'the package root'),
   }
 }
 
@@ -74,28 +80,77 @@ function reasonFor(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function isMissingFile(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT'
+}
+
+async function readOptional(path: string): Promise<string | null> {
+  try {
+    return await readFile(path, 'utf8')
+  } catch (error) {
+    if (isMissingFile(error)) {
+      return null
+    }
+    throw error
+  }
+}
+
+function jsonVersion(value: unknown): unknown {
+  return value !== null && typeof value === 'object' && 'version' in value
+    ? value.version
+    : undefined
+}
+
+export type PackageReaderOptions = {
+  versionFile?: string
+  versionPattern?: VersionPatternConfig | null
+}
+
 export function createPackageReader(
   cwd: string,
-  versionFile = 'package.json',
+  options: PackageReaderOptions = {},
 ): { read(): Promise<NpmManifestLookup> } {
+  const versionFile = options.versionFile ?? 'package.json'
+  const versionPattern = options.versionPattern ?? null
   const root = resolve(cwd)
-  const path = join(root, 'package.json')
+  const manifestPath = join(root, 'package.json')
   const versionPath = join(root, RepoRelativePath.from(versionFile, 'the configured version file'))
+
+  async function readVersion(): Promise<string> {
+    const source = await readFile(versionPath, 'utf8')
+
+    if (versionPattern === null) {
+      const version = jsonVersion(JSON.parse(source))
+      if (typeof version !== 'string') {
+        throw new TypeError('release version: expected a string')
+      }
+      return version
+    }
+
+    const match = matchVersion(source, versionPattern)
+    if (match.kind !== 'found') {
+      throw new TypeError(describeVersionMatchFailure(match, versionFile, versionPattern))
+    }
+    return match.value
+  }
+
+  async function readIdentity(): Promise<PackageIdentity> {
+    const source = await readOptional(manifestPath)
+    return source === null ? anonymousPackage : parsePackageIdentity(JSON.parse(source))
+  }
 
   return {
     async read(): Promise<NpmManifestLookup> {
       try {
-        const source = await readFile(path, 'utf8')
-        const packageValue: unknown = JSON.parse(source)
-        const versionValue: unknown =
-          versionFile === 'package.json'
-            ? packageValue
-            : JSON.parse(await readFile(versionPath, 'utf8'))
-        const version =
-          versionValue !== null && typeof versionValue === 'object' && 'version' in versionValue
-            ? versionValue.version
-            : undefined
-        return { kind: 'found', manifest: parseManifest(packageValue, version, root) }
+        const [version, identity] = await Promise.all([readVersion(), readIdentity()])
+        return {
+          kind: 'found',
+          manifest: {
+            ...identity,
+            version: SemVer.from(version, 'release version'),
+            root: AbsolutePath.from(root, 'the package root'),
+          },
+        }
       } catch (error) {
         return { kind: 'unreadable', path: versionPath, reason: reasonFor(error) }
       }

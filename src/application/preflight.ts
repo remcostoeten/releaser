@@ -218,9 +218,9 @@ export function repositoryChecks(config: ReleaserConfig, state: RepositoryState)
 export function manifestUnreadableCheck(path: string, reason: string): ReleaseCheck {
   return checkBlocked(
     'manifest-valid',
-    'package.json readable and valid',
+    'Version source readable and valid',
     `${path}: ${reason}`,
-    'Fix package.json before releasing.',
+    'Fix the configured version file before releasing.',
     false,
   )
 }
@@ -238,7 +238,7 @@ export function manifestChecks(isPrivate: boolean, npmPublish = true): ReleaseCh
       : checkSkipped('package-not-private', 'Package not private', 'npm publication is disabled')
     : checkPassed('package-not-private', 'Package not private')
 
-  return [checkPassed('manifest-valid', 'package.json readable and valid'), privateCheck]
+  return [checkPassed('manifest-valid', 'Version source readable and valid'), privateCheck]
 }
 
 export function npmAuthenticationCheck(authentication: NpmAuthentication): ReleaseCheck {

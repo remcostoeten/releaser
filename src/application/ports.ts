@@ -30,7 +30,7 @@ export type RepositoryReader = {
 }
 
 export type PackageManifest = {
-  name: PackageName
+  name: PackageName | null
   version: SemVer
   private: boolean
 }

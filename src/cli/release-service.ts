@@ -121,7 +121,7 @@ async function buildPlan(options: ReleaseCommandOptions): Promise<CreateReleaseP
         localTagExists: git.localTagExists,
         remoteTagExists: (_remote, tag) => git.remoteTagExists(tag),
       },
-      manifest: createPackageReader(root, config.versionFile),
+      manifest: createPackageReader(root, config),
       registry: npm,
       github,
       mutations: createMutationPlanner(root, config),
@@ -176,7 +176,7 @@ export async function doctorRelease(options: ReleaseCommandOptions) {
 export async function scanRelease(options: ReleaseCommandOptions) {
   const root = await repositoryRoot(options.cwd)
   const config = await loadConfig(root)
-  const manifest = await createPackageReader(root, config.versionFile).read()
+  const manifest = await createPackageReader(root, config).read()
   if (manifest.kind !== 'found') {
     throw new UsageError(`Cannot read ${manifest.path}: ${manifest.reason}`)
   }
@@ -194,11 +194,12 @@ export async function readReleaseStatus(options: ReleaseCommandOptions) {
   const npm = createNpmClient(runner, root)
   const [repository, manifest] = await Promise.all([
     git.readState(),
-    createPackageReader(root, config.versionFile).read(),
+    createPackageReader(root, config).read(),
   ])
+  const packageName = manifest.kind === 'found' ? manifest.manifest.name : null
   const registry =
-    config.npm.publish && manifest.kind === 'found'
-      ? await npm.readPublishedVersions(manifest.manifest.name)
+    config.npm.publish && packageName !== null
+      ? await npm.readPublishedVersions(packageName)
       : config.npm.publish
         ? { kind: 'unavailable' as const }
         : { kind: 'skipped' as const, reason: 'npm publication is disabled' }
@@ -227,6 +228,7 @@ export async function executePlannedRelease(plan: ReleasePlan, options: ReleaseC
     remote: plan.pushBranch.remote,
   })
   const npm = createNpmClient(runner, plan.repositoryRoot)
+  const { versionPattern } = await loadConfig(plan.repositoryRoot)
   const token = plan.githubRelease.kind === 'create' ? await resolveGitHubTokenWithGh(runner) : null
   const github =
     plan.githubRelease.kind === 'create'
@@ -237,13 +239,17 @@ export async function executePlannedRelease(plan: ReleasePlan, options: ReleaseC
         : createGitHubClient(token.value)
       : null
   function operation() {
-    return executeReleasePlan(createExecutionDependencies({ git, npm, github }), plan, {
-      ...(options.dryRun === undefined ? {} : { dryRun: options.dryRun }),
-      ...(options.interactive === undefined ? {} : { interactive: options.interactive }),
-      ...(options.otp === undefined ? {} : { otp: options.otp }),
-      ...(options.requestOtp === undefined ? {} : { requestOtp: options.requestOtp }),
-      ...(options.onExecutionEvent === undefined ? {} : { onEvent: options.onExecutionEvent }),
-    })
+    return executeReleasePlan(
+      createExecutionDependencies({ git, npm, github, versionPattern }),
+      plan,
+      {
+        ...(options.dryRun === undefined ? {} : { dryRun: options.dryRun }),
+        ...(options.interactive === undefined ? {} : { interactive: options.interactive }),
+        ...(options.otp === undefined ? {} : { otp: options.otp }),
+        ...(options.requestOtp === undefined ? {} : { requestOtp: options.requestOtp }),
+        ...(options.onExecutionEvent === undefined ? {} : { onEvent: options.onExecutionEvent }),
+      },
+    )
   }
   return options.dryRun === true ? operation() : withSignalHandling(plan.repositoryRoot, operation)
 }
@@ -272,7 +278,8 @@ export async function resumeReleaseFromCli(options: ReleaseCommandOptions) {
       stored.plan.githubRelease.kind === 'create' && token !== null
         ? createGitHubClient(token.value)
         : null
-    const deps = createExecutionDependencies({ git, npm, github })
+    const { versionPattern } = await loadConfig(stored.plan.repositoryRoot)
+    const deps = createExecutionDependencies({ git, npm, github, versionPattern })
     return await withSignalHandling(root, () =>
       resumeWithSession(deps, stored, session, {
         ...(options.interactive === undefined ? {} : { interactive: options.interactive }),

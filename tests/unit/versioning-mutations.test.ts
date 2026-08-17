@@ -173,6 +173,47 @@ describe('mutation planner', () => {
     const source = await readFile(join(root, 'tauri.conf.json'), 'utf8')
     expect(applyEdits(source, outcome.mutations[0]?.edits ?? [])).toContain('"version": "1.3.0"')
   })
+
+  it('mutates a non-JSON version source through the configured pattern', async () => {
+    const pkgbuild =
+      '# Maintainer: Someone\npkgname=remcorder\npkgver=0.0.5\npkgrel=1\nsource=("remcorder-$pkgver.tar.gz")\n'
+    const root = await temporaryProject({ PKGBUILD: pkgbuild })
+    const config = {
+      ...defaultConfig,
+      versionFile: 'PKGBUILD',
+      versionPattern: { pattern: '^pkgver=(.+)$', flags: 'm' },
+      npm: { ...defaultConfig.npm, publish: false },
+    }
+
+    const outcome = await createMutationPlanner(root, config).planMutations({
+      previousVersion: version('0.0.5'),
+      nextVersion: version('0.0.6'),
+    })
+
+    expect(outcome.kind).toBe('planned')
+    if (outcome.kind !== 'planned') return
+    expect(outcome.mutations).toHaveLength(1)
+    expect(applyEdits(pkgbuild, outcome.mutations[0]?.edits ?? [])).toBe(
+      '# Maintainer: Someone\npkgname=remcorder\npkgver=0.0.6\npkgrel=1\nsource=("remcorder-$pkgver.tar.gz")\n',
+    )
+  })
+
+  it('refuses a version pattern that matches more than once', async () => {
+    const root = await temporaryProject({ PKGBUILD: 'pkgver=0.0.5\npkgver=0.0.5\n' })
+    const config = {
+      ...defaultConfig,
+      versionFile: 'PKGBUILD',
+      versionPattern: { pattern: '^pkgver=(.+)$', flags: 'm' },
+      npm: { ...defaultConfig.npm, publish: false },
+    }
+
+    await expect(
+      createMutationPlanner(root, config).planMutations({
+        previousVersion: version('0.0.5'),
+        nextVersion: version('0.0.6'),
+      }),
+    ).rejects.toThrow('must match exactly once')
+  })
 })
 
 describe('optional package lock', () => {
